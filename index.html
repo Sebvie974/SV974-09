@@ -1739,6 +1739,64 @@
                 document.body.style.cursor = 'default';
             }
         }
+
+    // ==========================================
+        // IMPORTATION DE SAUVEGARDE V1 VERS SUPABASE
+        // ==========================================
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    // On récupère les données du fichier de sauvegarde
+                    const oldFse = data.fse_data || data.fseList || [];
+                    const oldNoemie = data.noemie_data || data.noemieList || [];
+                    const oldRetro = data.retro_data || data.retroList || [];
+                    const oldPraticiens = data.praticiens_data_v2 || data.praticiensList || [];
+
+                    const confirmMsg = `Sauvegarde détectée !\nVoulez-vous envoyer vers la base de données en ligne :\n- ${oldFse.length} factures\n- ${oldNoemie.length} retours NOEMIE ?`;
+                    if (!confirm(confirmMsg)) {
+                        event.target.value = ''; 
+                        return;
+                    }
+
+                    document.body.style.cursor = 'wait';
+
+                    // 1. Envoi des factures vers Supabase
+                    if (oldFse.length > 0) {
+                        const dbFse = oldFse.map(mapFseToDb);
+                        const { error } = await supabaseClient.from('fse').upsert(dbFse);
+                        if (error) throw error;
+                    }
+                    
+                    // 2. Envoi des retours NOEMIE vers Supabase
+                    if (oldNoemie.length > 0) {
+                        const dbNoemie = oldNoemie.map(mapNoemieToDb);
+                        const { error } = await supabaseClient.from('noemie').upsert(dbNoemie);
+                        if (error) throw error;
+                    }
+
+                    // 3. Restauration des paramètres locaux (Rétrocessions et couleurs Praticiens)
+                    if (oldRetro.length > 0) localStorage.setItem('retro_data', JSON.stringify(oldRetro));
+                    if (oldPraticiens.length > 0) localStorage.setItem('praticiens_data_v2', JSON.stringify(oldPraticiens));
+
+                    alert("🎉 Importation réussie ! Tes données sont maintenant synchronisées dans le cloud.");
+                    window.location.reload();
+
+                } catch (err) {
+                    console.error("Erreur d'import :", err);
+                    alert("Erreur lors de l'importation : " + err.message);
+                } finally {
+                    document.body.style.cursor = 'default';
+                    event.target.value = ''; // On remet le bouton à zéro
+                }
+            };
+            reader.readAsText(file);
+        }
 </script>
 </body>
 </html>
