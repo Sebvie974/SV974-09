@@ -756,8 +756,7 @@
         
         let retroList = getSafeArray('retro_data');
         let customYears = getSafeArray('custom_years');
-        let praticiensList = getSafeArray('praticiens_data_v2');
-        if (praticiensList.length === 0) praticiensList = [{ name: 'Praticien 1', color: 'vert' }];
+        let praticiensList = [];
 
         // Variables d'état
         let currentEditId = null, currentNoemieEditId = null, currentRetroEditId = null, currentRegulRetroId = null, currentDreFseId = null; 
@@ -782,14 +781,28 @@
             
             document.body.style.cursor = 'wait';
             
-            // Récupération des FSE et Noemie via supabaseClient
-            const [resFse, resNoemie] = await Promise.all([
+            // Récupération des FSE, Noemie ET Praticiens
+            const [resFse, resNoemie, resPrat] = await Promise.all([
                 supabaseClient.from('fse').select('*'),
-                supabaseClient.from('noemie').select('*')
+                supabaseClient.from('noemie').select('*'),
+                supabaseClient.from('praticiens_suivi').select('*')
             ]);
 
             if (resFse.data) fseList = resFse.data.map(mapFseToJs);
             if (resNoemie.data) noemieList = resNoemie.data.map(mapNoemieToJs);
+            
+            if (resPrat.data && resPrat.data.length > 0) {
+                praticiensList = resPrat.data; // On charge la liste en ligne
+            } else {
+                // Auto-migration secrète : si la base est vide mais que le PC a des données
+                let localPrats = getSafeArray('praticiens_data_v2');
+                if (localPrats.length > 0) {
+                    praticiensList = localPrats.map((p, i) => ({ id: 'prat_' + Date.now() + '_' + i, name: p.name, color: p.color || 'vert' }));
+                    await supabaseClient.from('praticiens_suivi').upsert(praticiensList);
+                } else {
+                    praticiensList = [{ id: '1', name: 'Praticien 1', color: 'vert' }];
+                }
+            }
 
             populateSelects();
             updateYearsDatalist(); 
@@ -1473,27 +1486,50 @@
         }
 
         // ==========================================
-        // 6. RÉTROCESSIONS ET PARAMÈTRES (LOCAL STORAGE)
+        // 6.0 PARAMÈTRES DES PRATICIENS (SUPABASE)
         // ==========================================
         function openSettingsModal() {
             const container = document.getElementById('settingsPraticiensContainer'); container.innerHTML = '';
-            praticiensList.forEach(p => addSettingsPraticienRow(p.name, p.color));
+            praticiensList.forEach(p => addSettingsPraticienRow(p.id, p.name, p.color));
             if(praticiensList.length === 0) addSettingsPraticienRow();
             document.getElementById('settingsModal').classList.remove('hidden');
         }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
         
-        function addSettingsPraticienRow(name = '', color = 'vert') {
+        function addSettingsPraticienRow(id = '', name = '', color = 'vert') {
             const div = document.createElement('div'); div.className = "flex gap-2 items-center praticien-setting-row";
+            if(id) div.dataset.id = id; // On cache l'ID dans le HTML
             div.innerHTML = `<input type="text" class="flex-1 border border-gray-300 rounded p-1.5 text-sm p-name" value="${name}" placeholder="Nom du praticien"><select class="border border-gray-300 rounded p-1.5 text-sm p-color bg-gray-50 font-medium"><option value="vert" ${color==='vert'?'selected':''}>🟢 Vert</option><option value="bleu" ${color==='bleu'?'selected':''}>🔵 Bleu</option><option value="rose" ${color==='rose'?'selected':''}>🌸 Rose</option><option value="violet" ${color==='violet'?'selected':''}>🟣 Violet</option><option value="orange" ${color==='orange'?'selected':''}>🟠 Orange</option></select><button type="button" onclick="this.parentElement.remove()" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 bg-rose-50 rounded transition">✕</button>`;
             document.getElementById('settingsPraticiensContainer').appendChild(div);
         }
 
-        function saveSettings() {
-            const pRows = document.querySelectorAll('.praticien-setting-row'); praticiensList = [];
-            pRows.forEach(row => { const n = row.querySelector('.p-name').value.trim(), c = row.querySelector('.p-color').value; if(n) praticiensList.push({name: n, color: c}); });
-            if(praticiensList.length === 0) praticiensList = [{name: 'Praticien 1', color: 'vert'}];
-            localStorage.setItem('praticiens_data_v2', JSON.stringify(praticiensList)); populateSelects(); closeSettingsModal(); triggerAllRenders();
+        async function saveSettings() {
+            document.body.style.cursor = 'wait';
+            const pRows = document.querySelectorAll('.praticien-setting-row'); 
+            let newPraticiensList = [];
+            
+            // On récupère les données tapées
+            pRows.forEach(row => { 
+                const n = row.querySelector('.p-name').value.trim(); 
+                const c = row.querySelector('.p-color').value; 
+                let pid = row.dataset.id || ('prat_' + Date.now() + Math.random().toString(36).substr(2, 5));
+                if(n) newPraticiensList.push({ id: pid, name: n, color: c }); 
+            });
+            
+            if(newPraticiensList.length === 0) newPraticiensList = [{ id: '1', name: 'Praticien 1', color: 'vert' }];
+            
+            // On repère qui a été effacé pour les retirer de Supabase
+            const currentIds = newPraticiensList.map(p => p.id);
+            const idsToDelete = praticiensList.map(p => p.id).filter(id => !currentIds.includes(id));
+            
+            if(idsToDelete.length > 0) await supabaseClient.from('praticiens_suivi').delete().in('id', idsToDelete);
+            
+            // On envoie les ajouts ou modifications
+            if(newPraticiensList.length > 0) await supabaseClient.from('praticiens_suivi').upsert(newPraticiensList);
+
+            praticiensList = newPraticiensList;
+            populateSelects(); closeSettingsModal(); triggerAllRenders();
+            document.body.style.cursor = 'default';
         }
 
         function openRetroModal() {
