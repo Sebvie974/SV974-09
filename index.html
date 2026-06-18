@@ -1826,6 +1826,39 @@
             };
             reader.readAsText(file);
         }
+
+        // ==========================================
+        // ERGONOMIE : NAVIGATION AVEC LA TOUCHE ENTRÉE
+        // ==========================================
+        function handleFormEnter(e, containerId, columnsClasses) {
+            if (e.key === 'Enter') {
+                const active = document.activeElement; 
+                if (!active || active.tagName === 'BUTTON') return;
+                
+                let currentClass = columnsClasses.find(cls => active.classList.contains(cls)); 
+                if (!currentClass) return; 
+                
+                // On empêche la touche Entrée de valider le formulaire
+                e.preventDefault(); 
+                
+                const container = document.getElementById(containerId);
+                let colIndex = columnsClasses.indexOf(currentClass); 
+                let inputsInCol = Array.from(container.querySelectorAll('.' + currentClass)); 
+                let currentIndex = inputsInCol.indexOf(active);
+                
+                // Logique de passage au champ suivant
+                if (currentIndex >= 0 && currentIndex < inputsInCol.length - 1) { 
+                    inputsInCol[currentIndex + 1].focus(); 
+                } else {
+                    if (colIndex < columnsClasses.length - 1) { 
+                        let nextInputs = container.querySelectorAll('.' + columnsClasses[colIndex + 1]); 
+                        if (nextInputs.length > 0) nextInputs[0].focus(); 
+                    } else { 
+                        active.blur(); 
+                    }
+                }
+            }
+        }
 </script>
 </body>
 </html>
