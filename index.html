@@ -28,9 +28,7 @@
                     <button onclick="switchPage('noemiePage')" id="navNoemie" class="px-3 py-1.5 text-sm font-semibold rounded text-teal-200 hover:text-white hover:bg-teal-600/50 transition whitespace-nowrap">Retours NOEMIE</button>
                     <button onclick="switchPage('retrosPage')" id="navRetros" class="px-3 py-1.5 text-sm font-semibold rounded text-teal-200 hover:text-white hover:bg-teal-600/50 transition whitespace-nowrap">Rétros</button>
                     <button onclick="openImpayesModal()" class="px-3 py-1.5 text-sm font-semibold rounded text-rose-200 hover:text-white hover:bg-rose-600/50 transition bg-rose-700/50 ml-1 whitespace-nowrap">⚠️ Impayés</button>
-                    <button type="button" onclick="migrateLocalToSupabase()" class="px-3 py-1.5 text-sm font-bold rounded bg-rose-600 text-white hover:bg-rose-500 shadow-md transition ml-4">
-    ☁️ Importer mes anciennes données
-</button>
+                    
                 </div>
             </h1>
             <div class="flex flex-wrap items-center gap-2 md:gap-3">
@@ -1695,52 +1693,7 @@
         function closeImpayesModal() { document.getElementById('impayesModal').classList.add('hidden'); }
         function renderImpayesTable() {} 
 
-    // ==========================================
-        // OUTIL DE MIGRATION (LOCAL -> SUPABASE)
         // ==========================================
-        async function migrateLocalToSupabase() {
-            // 1. Récupération des anciennes données locales
-            const oldFse = JSON.parse(localStorage.getItem('fse_data') || '[]');
-            const oldNoemie = JSON.parse(localStorage.getItem('noemie_data') || '[]');
-            
-            if (oldFse.length === 0 && oldNoemie.length === 0) {
-                alert("Aucune donnée locale trouvée sur ce navigateur.");
-                return;
-            }
-
-            const confirmMsg = `Voulez-vous envoyer vers Supabase :\n- ${oldFse.length} factures\n- ${oldNoemie.length} retours NOEMIE ?`;
-            if (!confirm(confirmMsg)) return;
-
-            document.body.style.cursor = 'wait';
-            
-            try {
-                // 2. Envoi des factures
-                if (oldFse.length > 0) {
-                    // On utilise mapFseToDb pour traduire les noms des colonnes
-                    const dbFse = oldFse.map(mapFseToDb);
-                    const { error } = await supabaseClient.from('fse').upsert(dbFse);
-                    if (error) throw error;
-                }
-                
-                // 3. Envoi des retours NOEMIE
-                if (oldNoemie.length > 0) {
-                    const dbNoemie = oldNoemie.map(mapNoemieToDb);
-                    const { error } = await supabaseClient.from('noemie').upsert(dbNoemie);
-                    if (error) throw error;
-                }
-                
-                alert("🎉 Migration réussie avec succès ! \nVos données sont maintenant dans le Cloud. La page va se recharger.");
-                window.location.reload();
-                
-            } catch (err) {
-                console.error(err);
-                alert("Erreur lors de la migration : " + err.message);
-            } finally {
-                document.body.style.cursor = 'default';
-            }
-        }
-
-    // ==========================================
         // IMPORTATION DE SAUVEGARDE V1 VERS SUPABASE
         // ==========================================
         function importData(event) {
@@ -1793,6 +1746,82 @@
                 } finally {
                     document.body.style.cursor = 'default';
                     event.target.value = ''; // On remet le bouton à zéro
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ==========================================
+        // SAUVEGARDE ET IMPORTATION (COMPATIBLE SUPABASE)
+        // ==========================================
+
+        // 1. Fonction pour TÉLÉCHARGER une sauvegarde sur l'ordinateur
+        function exportData() {
+            // On rassemble toutes les données actuellement chargées depuis Supabase et le local
+            const backupData = {
+                fse_data: fseList,
+                noemie_data: noemieList,
+                retro_data: retroList,
+                praticiens_data_v2: praticiensList
+            };
+
+            // Création du fichier JSON
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "sauvegarde_kine_" + new Date().toLocaleDateString('fr-FR').replace(/\//g, '-') + ".json");
+            
+            // Lancement du téléchargement
+            document.body.appendChild(dlAnchorElem);
+            dlAnchorElem.click();
+            dlAnchorElem.remove();
+        }
+
+        // 2. Fonction pour IMPORTER un fichier et l'envoyer vers Supabase
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    const oldFse = data.fse_data || data.fseList || [];
+                    const oldNoemie = data.noemie_data || data.noemieList || [];
+                    const oldRetro = data.retro_data || data.retroList || [];
+                    const oldPraticiens = data.praticiens_data_v2 || data.praticiensList || [];
+
+                    const confirmMsg = `Sauvegarde détectée !\nVoulez-vous envoyer vers la base de données en ligne :\n- ${oldFse.length} factures\n- ${oldNoemie.length} retours NOEMIE ?`;
+                    if (!confirm(confirmMsg)) { event.target.value = ''; return; }
+
+                    document.body.style.cursor = 'wait';
+
+                    // Envoi vers Supabase
+                    if (oldFse.length > 0) {
+                        const dbFse = oldFse.map(mapFseToDb);
+                        const { error } = await supabaseClient.from('fse').upsert(dbFse);
+                        if (error) throw error;
+                    }
+                    if (oldNoemie.length > 0) {
+                        const dbNoemie = oldNoemie.map(mapNoemieToDb);
+                        const { error } = await supabaseClient.from('noemie').upsert(dbNoemie);
+                        if (error) throw error;
+                    }
+
+                    // Restauration locale des paramètres
+                    if (oldRetro.length > 0) localStorage.setItem('retro_data', JSON.stringify(oldRetro));
+                    if (oldPraticiens.length > 0) localStorage.setItem('praticiens_data_v2', JSON.stringify(oldPraticiens));
+
+                    alert("🎉 Importation réussie ! Tes données sont maintenant synchronisées dans le cloud.");
+                    window.location.reload();
+
+                } catch (err) {
+                    console.error("Erreur d'import :", err);
+                    alert("Erreur lors de l'importation : " + err.message);
+                } finally {
+                    document.body.style.cursor = 'default';
+                    event.target.value = ''; 
                 }
             };
             reader.readAsText(file);
