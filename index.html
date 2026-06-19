@@ -1020,11 +1020,19 @@
 
             if (itemsToUpsert.length === 0) return;
 
-            document.body.style.cursor = 'wait';
-            await supabaseClient.from('fse').upsert(itemsToUpsert.map(mapFseToDb));
-            document.body.style.cursor = 'default';
+        document.body.style.cursor = 'wait';
+        // On capture la réponse de Supabase pour vérifier s'il y a une erreur
+        const { error } = await supabaseClient.from('fse').upsert(itemsToUpsert.map(mapFseToDb));
+        document.body.style.cursor = 'default';
 
-            render(); updateYearsDatalist(); updateDatalists();
+        // Si une erreur survient, on bloque tout et on affiche le problème !
+        if (error) {
+            console.error("Détails du refus Supabase :", error);
+            alert("❌ Supabase a refusé la sauvegarde !\nRaison : " + error.message);
+            return; // On arrête la fonction ici pour ne pas créer l'illusion que c'est enregistré
+        }
+
+        render(); updateYearsDatalist(); updateDatalists();
             const wasEditing = (currentEditId !== null);
             resetFseFormState();
             if (!wasEditing) document.getElementById('fseLot').focus();
