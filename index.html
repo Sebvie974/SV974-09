@@ -983,6 +983,37 @@
             }
 
             const rows = document.querySelectorAll('#fseFacturesList .fse-row');
+            
+            // --- NOUVEAU : VÉRIFICATION DES DOUBLONS ---
+            if (!currentEditId) { // Uniquement pour les nouvelles saisies
+                let duplicateFSEs = [];
+                let duplicateLot = false;
+
+                // 1. Vérifie si le lot existe déjà ce jour-là pour ce praticien
+                if (lotNum && lotNum !== '-') {
+                    duplicateLot = fseList.some(f => f.lot === lotNum && f.date === lotDate && f.praticien === targetPraticien);
+                }
+
+                // 2. Vérifie si les N° de factures tapés existent déjà
+                rows.forEach(row => {
+                    const num = row.querySelector('.fse-num-input').value.trim().toUpperCase();
+                    if (num && num !== '-') {
+                        if (fseList.some(f => f.numFSE === num)) duplicateFSEs.push(num);
+                    }
+                });
+
+                // 3. Affichage de l'alerte bloquante si doublon trouvé
+                if (duplicateLot || duplicateFSEs.length > 0) {
+                    let msg = "⚠️ ATTENTION - DOUBLON(S) POTENTIEL(S) :\n\n";
+                    if (duplicateLot) msg += `- Le Lot N° ${lotNum} a déjà été enregistré à cette date.\n`;
+                    if (duplicateFSEs.length > 0) msg += `- Les factures suivantes existent déjà : ${duplicateFSEs.join(', ')}.\n`;
+                    msg += "\nVoulez-vous vraiment forcer cet enregistrement ?";
+                    
+                    if (!confirm(msg)) return; // On annule tout si tu cliques sur "Annuler"
+                }
+            }
+            // --- FIN DE LA VÉRIFICATION ---
+
             let itemsToUpsert = [];
 
             rows.forEach(row => {
@@ -1020,77 +1051,24 @@
 
             if (itemsToUpsert.length === 0) return;
 
-        document.body.style.cursor = 'wait';
-        // On capture la réponse de Supabase pour vérifier s'il y a une erreur
-        const { error } = await supabaseClient.from('fse').upsert(itemsToUpsert.map(mapFseToDb));
-        document.body.style.cursor = 'default';
+            document.body.style.cursor = 'wait';
+            
+            // Envoi à Supabase avec gestion des erreurs
+            const { error } = await supabaseClient.from('fse').upsert(itemsToUpsert.map(mapFseToDb));
+            document.body.style.cursor = 'default';
 
-        // Si une erreur survient, on bloque tout et on affiche le problème !
-        if (error) {
-            console.error("Détails du refus Supabase :", error);
-            alert("❌ Supabase a refusé la sauvegarde !\nRaison : " + error.message);
-            return; // On arrête la fonction ici pour ne pas créer l'illusion que c'est enregistré
-        }
+            if (error) {
+                console.error("Détails du refus Supabase :", error);
+                alert("❌ Supabase a refusé la sauvegarde !\nRaison : " + error.message);
+                return;
+            }
 
-        render(); updateYearsDatalist(); updateDatalists();
+            render(); updateYearsDatalist(); updateDatalists();
+            
             const wasEditing = (currentEditId !== null);
             resetFseFormState();
             if (!wasEditing) document.getElementById('fseLot').focus();
             else { document.getElementById('fseModal').classList.add('hidden'); currentEditId = null; }
-        }
-
-        // ==========================================
-        // ACTIONS RAPIDES SUR LES FSE (AVEC SUPABASE)
-        // ==========================================
-        async function toggleCheck(id, type) {
-            const item = fseList.find(f => f.id === id);
-            if (item && !item.isLocked && !item.isDefacture) { 
-                if (type === 'RO') item.checkRO = !item.checkRO; if (type === 'RC') item.checkRC = !item.checkRC; 
-                checkAndLockFSE(item); await dbUpdateFse(item); render(); 
-            }
-        }
-        async function updateVirement(id, type, dateValue) {
-            const item = fseList.find(f => f.id === id);
-            if (item && !item.isLocked && !item.isDefacture) { 
-                if (type === 'RO') item.dateVirementRO = dateValue; if (type === 'RC') item.dateVirementRC = dateValue; 
-                await dbUpdateFse(item); render(); 
-            }
-        }
-        async function updateMutuelleRapide(id, newMutuelle) {
-            const item = fseList.find(f => f.id === id);
-            if (item) { item.mutuelle = newMutuelle; await dbUpdateFse(item); render(); }
-        }
-        async function toggleLock(id) { const item = fseList.find(f => f.id === id); if (item) { item.isLocked = !item.isLocked; await dbUpdateFse(item); render(); } }
-        
-        async function toggleLotDegrade(lotKey, isChecked) {
-            let toUpdate = [];
-            fseList.forEach(f => {
-                let key = `${f.date}_${f.lot}_${f.caisse}_${f.praticien}`;
-                if (key === lotKey && !f.isLocked && !f.isDefacture) { f.isDegrade = isChecked; toUpdate.push(mapFseToDb(f)); }
-            });
-            if(toUpdate.length > 0) await supabaseClient.from('fse').upsert(toUpdate);
-            render();
-        }
-
-        async function toggleRejet(id) {
-            const item = fseList.find(f => f.id === id);
-            if (item && !item.isLocked && !item.isDefacture) { 
-                if (!item.isRejet) { let motif = prompt("Motif du rejet :"); if (motif !== null) { item.isRejet = true; item.motifRejet = motif || "Non précisé"; } } 
-                else { item.isRejet = false; item.motifRejet = ""; }
-                await dbUpdateFse(item); render(); 
-            }
-        }
-        function showRejetMotif(id) { const item = fseList.find(f => f.id === id); if (item && item.isRejet) alert("Motif de rejet :\n" + item.motifRejet); }
-
-        async function toggleDefacture(id) {
-            const item = fseList.find(f => f.id === id);
-            if (item && !item.isLocked) { 
-                if(!item.isDefacture) {
-                    let remp = prompt("Facture Défacturée/Annulée.\nEntrez un N° de FSE de remplacement (optionnel) :");
-                    if(remp !== null) { item.isDefacture = true; item.fseRemplacement = remp || ""; item.checkRO = false; item.checkRC = false; }
-                } else { item.isDefacture = false; item.fseRemplacement = ""; }
-                await dbUpdateFse(item); render(); 
-            }
         }
 
         function editFSE(id) {
@@ -1195,7 +1173,10 @@
                 const trLot = document.createElement('tr'); trLot.className = `border-t-4 border-gray-300 font-bold ${lotBg}`;
                 trLot.innerHTML = `
                     <td class="p-2"><div class="flex items-center gap-1.5"><input type="checkbox" onchange="toggleLotDegrade('${lot.key}', this.checked)" ${lot.isDegrade ? 'checked' : ''} class="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"><span>${dLot}</span></div></td>
-                    <td class="p-2 truncate max-w-[100px]">${badgePrat}</td><td class="p-2"><div class="text-gray-800">${lot.lot}</div><div class="text-[10px] text-teal-700 truncate max-w-[100px]">${lot.caisse}</div></td>
+                    <td class="p-2 truncate max-w-[100px]">${badgePrat}</td><td class="p-2"><div class="text-gray-800 flex items-center gap-2">
+    ${lot.lot} 
+    <button onclick="editLotDetails('${lot.key}')" class="text-blue-500 hover:text-blue-700 text-[10px] bg-blue-50 px-1.5 rounded border border-blue-200" title="Modifier le N° de Lot et la Caisse">✎</button>
+</div><div class="text-[10px] text-teal-700 truncate max-w-[100px]">${lot.caisse}</div></td>
                     <td class="p-2 text-center" colspan="3"><span class="px-2 py-0.5 rounded bg-gray-300 text-gray-700 text-[10px] shadow-sm">${nbActes} Facture(s)</span></td>
                     <td class="p-2 text-right text-teal-700 font-mono">${lot.tRO.toFixed(2)}€</td><td colspan="2"></td><td class="p-2 text-right text-indigo-700 font-mono">${lot.tRC.toFixed(2)}€</td><td colspan="2"></td>
                     <td class="p-2 text-right font-mono text-gray-800">${tGlobal.toFixed(2)}€</td><td class="p-2 text-right font-mono ${dGlobal > 0 ? 'text-rose-600' : 'text-emerald-700'}">${dGlobal.toFixed(2)}€</td><td></td>
@@ -1322,6 +1303,40 @@
             const gPrat = document.getElementById('globalPraticienFilter').value;
             let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
 
+            // ==========================================
+            // NOUVEAU : VÉRIFICATION DES DOUBLONS NOEMIE
+            // ==========================================
+            if (!currentNoemieEditId) { // Uniquement pour les nouvelles saisies
+                let duplicateReleve = false;
+                let duplicateFSEs = [];
+                const releveVal = document.getElementById('n_releve').value.trim();
+
+                // 1. Vérifie si le numéro de Relevé existe déjà
+                if (releveVal) {
+                    duplicateReleve = noemieList.some(n => n.releve === releveVal);
+                }
+
+                // 2. Vérifie si les FSE saisies ont déjà été pointées dans un autre retour
+                document.querySelectorAll('#noemieFacturesList .facture-row').forEach(row => {
+                    let fVal = row.querySelector('.fse-input').value.trim().toUpperCase();
+                    if (fVal && fVal !== '-') {
+                        const existsInNoemie = noemieList.some(n => n.factures && n.factures.some(f => f.fse === fVal));
+                        if (existsInNoemie) duplicateFSEs.push(fVal);
+                    }
+                });
+
+                // 3. Affichage de l'alerte bloquante si doublon
+                if (duplicateReleve || duplicateFSEs.length > 0) {
+                    let msg = "⚠️ ATTENTION - DOUBLON(S) POTENTIEL(S) :\n\n";
+                    if (duplicateReleve) msg += `- Le Relevé N° ${releveVal} a déjà été enregistré.\n`;
+                    if (duplicateFSEs.length > 0) msg += `- Les factures suivantes sont déjà pointées dans un autre retour : ${duplicateFSEs.join(', ')}.\n`;
+                    msg += "\nVoulez-vous vraiment forcer cet enregistrement ?";
+                    
+                    if (!confirm(msg)) return; // On annule l'enregistrement si on clique sur "Annuler"
+                }
+            }
+            // ==========================================
+
             let facturesData = [], totalGeneral = 0, fsesToUpdate = [];
             
             document.querySelectorAll('#noemieFacturesList .facture-row').forEach(row => {
@@ -1358,18 +1373,31 @@
             } else { targetNoemie = { ...newNoemieData, id: Date.now().toString() }; noemieList.push(targetNoemie); }
 
             document.body.style.cursor = 'wait';
-            await Promise.all([
+            
+            // Capture des réponses de Supabase pour afficher les erreurs si besoin
+            const [resNoemie, resFse] = await Promise.all([
                 supabaseClient.from('noemie').upsert(mapNoemieToDb(targetNoemie)),
-                fsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(fsesToUpdate.map(mapFseToDb)) : Promise.resolve()
+                fsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(fsesToUpdate.map(mapFseToDb)) : Promise.resolve({ error: null })
             ]);
+            
             document.body.style.cursor = 'default';
+
+            // Alerte si Supabase bloque l'enregistrement
+            if (resNoemie.error || resFse.error) {
+                const err = resNoemie.error || resFse.error;
+                console.error("Détails du refus Supabase :", err);
+                alert("❌ Supabase a refusé la sauvegarde !\nRaison : " + err.message);
+                return;
+            }
 
             render(); renderNoemieTable(); updateDatalists(); updateYearsDatalist();
 
             if (isKeepOpen) {
                 ['n_date','n_caisse','n_encaisse','n_releve','n_info'].forEach(id => document.getElementById(id).value = '');
                 document.getElementById('noemieFacturesList').innerHTML = ''; addNoemieFactureRow(); setTimeout(() => document.getElementById('n_date').focus(), 100);
-            } else { document.getElementById('noemieModal').classList.add('hidden'); currentNoemieEditId = null; }
+            } else { 
+                document.getElementById('noemieModal').classList.add('hidden'); currentNoemieEditId = null; 
+            }
         }
 
         function editNoemie(id) {
@@ -1902,6 +1930,40 @@
                     }
                 }
             }
+        }
+    
+    async function editLotDetails(lotKey) {
+            // Retrouve toutes les factures de ce lot précis
+            const fsesInLot = fseList.filter(f => `${f.date}_${f.lot}_${f.caisse}_${f.praticien}` === lotKey);
+            if(fsesInLot.length === 0) return;
+
+            const first = fsesInLot[0];
+            
+            // Demande les nouvelles valeurs
+            const newLot = prompt("MODIFIER LE LOT\nNouveau numéro de lot :", first.lot);
+            if(newLot === null) return; 
+            
+            const newCaisse = prompt("Nouvelle caisse pour ce lot (ex: CPAM) :", first.caisse);
+            if(newCaisse === null) return;
+            
+            document.body.style.cursor = 'wait';
+            
+            // Met à jour toutes les FSE du lot
+            fsesInLot.forEach(f => {
+                f.lot = newLot || '-';
+                f.caisse = newCaisse || '-';
+            });
+            
+            // Envoie les modifications groupées vers Supabase
+            const { error } = await supabaseClient.from('fse').upsert(fsesInLot.map(mapFseToDb));
+            document.body.style.cursor = 'default';
+            
+            if (error) {
+                alert("❌ Erreur lors de la modification : " + error.message);
+                return;
+            }
+            
+            render(); updateDatalists();
         }
 </script>
 </body>
