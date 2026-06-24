@@ -393,6 +393,11 @@
                             </div>
                         </div>
                         <div id="noemieFacturesList" class="space-y-2"></div>
+                            <div class="flex justify-end items-center mt-3 p-2 bg-indigo-50 rounded border border-indigo-100 shadow-inner">
+                            <span class="font-semibold text-gray-700 mr-2">Total en cours :</span>
+                            <span id="noemieLiveTotal" class="font-bold text-xl text-indigo-700">0.00</span>
+                            <span class="font-bold text-xl text-indigo-700 ml-1">€</span>
+                            </div>
                     </div>
                     
                     <div class="mt-6 flex justify-end gap-3">
@@ -1258,18 +1263,19 @@
         function updateNbNoemieFseRows() { let nb = parseInt(document.getElementById('nbNoemieFseToAdd').value) || 1; document.getElementById('noemieFacturesList').innerHTML = ''; for(let i=0; i<nb; i++) addNoemieFactureRow(); }
 
         function addNoemieFactureRow(fse = '', montant = '') {
-            const list = document.getElementById('noemieFacturesList');
-            const div = document.createElement('div'); div.className = "facture-row flex flex-col gap-0.5 mb-1 bg-white p-1.5 rounded border border-gray-100 shadow-sm"; 
-            
-            const inputsDiv = document.createElement('div'); inputsDiv.className = "flex items-center gap-2";
-            inputsDiv.innerHTML = `
-                <div class="w-1/2"><input type="text" placeholder="N° FSE" value="${fse}" class="fse-input w-full border border-gray-300 rounded p-1 text-xs focus:ring-emerald-500 uppercase font-mono shadow-inner" oninput="updateNoemieRowInfo(this)"></div>
-                <div class="w-1/2 flex items-center gap-1.5"><input type="text" inputmode="decimal" placeholder="Montant" value="${montant}" class="montant-input w-full border border-gray-300 rounded p-1 text-xs focus:ring-emerald-500 font-mono shadow-inner" oninput="updateNoemieRowInfo(this)"><button type="button" onclick="this.closest('.facture-row').remove();" class="text-rose-500 hover:text-rose-700 font-bold px-1 text-lg outline-none" tabindex="-1">×</button></div>
-            `;
-            const infoDiv = document.createElement('div'); infoDiv.className = "fse-info-display text-[9px] min-h-[14px] px-1 flex items-center gap-2 mt-0.5";
-            div.appendChild(inputsDiv); div.appendChild(infoDiv); list.appendChild(div);
-            if(fse) updateNoemieRowInfo(div.querySelector('.fse-input'));
-        }
+    const list = document.getElementById('noemieFacturesList');
+    const div = document.createElement('div'); div.className = "facture-row flex flex-col gap-0.5 mb-1 bg-white p-1.5 rounded border border-gray-100 shadow-sm"; 
+    
+    const inputsDiv = document.createElement('div'); inputsDiv.className = "flex items-center gap-2";
+    // Ajout de updateNoemieTotal() sur le oninput du montant ET sur le onclick du bouton de suppression
+    inputsDiv.innerHTML = `
+        <div class="w-1/2"><input type="text" placeholder="N° FSE" value="${fse}" class="fse-input w-full border border-gray-300 rounded p-1 text-xs focus:ring-emerald-500 uppercase font-mono shadow-inner" oninput="updateNoemieRowInfo(this)"></div>
+        <div class="w-1/2 flex items-center gap-1.5"><input type="text" inputmode="decimal" placeholder="Montant" value="${montant}" class="montant-input w-full border border-gray-300 rounded p-1 text-xs focus:ring-emerald-500 font-mono shadow-inner" oninput="updateNoemieRowInfo(this); updateNoemieTotal()"><button type="button" onclick="this.closest('.facture-row').remove(); updateNoemieTotal();" class="text-rose-500 hover:text-rose-700 font-bold px-1 text-lg outline-none" tabindex="-1">×</button></div>
+    `;
+    const infoDiv = document.createElement('div'); infoDiv.className = "fse-info-display text-[9px] min-h-[14px] px-1 flex items-center gap-2 mt-0.5";
+    div.appendChild(inputsDiv); div.appendChild(infoDiv); list.appendChild(div);
+    if(fse) updateNoemieRowInfo(div.querySelector('.fse-input'));
+}
 
         function updateNoemieRowInfo(element) {
             if(!element) return; const row = element.closest('.facture-row'); if(!row) return;
@@ -2055,35 +2061,22 @@ async function forceSyncNoemieToFse() {
                 const dEncaisse = n.encaisseLe || n.dateNoemie;
 
                 const isRoMatch = mVal > 0 && Math.abs(mVal - linkedFse.partRO) <= 0.01;
-                const isRcMatch = mVal > 0 && Math.abs(mVal - linkedFse.partRC) <= 0.01;
-                const isGlobalMatch = mVal > 0 && Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
+                            const isRcMatch = mVal > 0 && Math.abs(mVal - linkedFse.partRC) <= 0.01;
+                            const isGlobalMatch = mVal > 0 && Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
 
-                // Application des vérifications si elles manquent
-                if (isRoMatch && !linkedFse.checkRO) { 
-                    linkedFse.checkRO = true; 
-                    if(dEncaisse) linkedFse.dateVirementRO = dEncaisse; 
-                    changed = true; 
-                }
-                else if (isRcMatch && !linkedFse.checkRC) { 
-                    linkedFse.checkRC = true; 
-                    if(dEncaisse) linkedFse.dateVirementRC = dEncaisse; 
-                    changed = true; 
-                }
-                else if (isGlobalMatch && (!linkedFse.checkRO || !linkedFse.checkRC)) { 
-                    linkedFse.checkRO = true; 
-                    linkedFse.checkRC = true; 
-                    if(dEncaisse) { 
-                        linkedFse.dateVirementRO = dEncaisse; 
-                        linkedFse.dateVirementRC = dEncaisse; 
-                    }
-                    changed = true; 
-                }
-
-                // Verrouillage de la FSE si tout est payé
-                if (linkedFse.checkRO && linkedFse.checkRC && !linkedFse.isLocked) {
-                    linkedFse.isLocked = true;
-                    changed = true;
-                }
+                            if (linkedFse.isLocked) {
+                                isDuplicate = true; // FSE totalement soldée et verrouillée
+                            } else if (isGlobalMatch && linkedFse.partRO > 0 && linkedFse.partRC > 0) {
+                                // Vrai paiement global : il y a bien 2 parts > 0
+                                if (linkedFse.checkRO || linkedFse.checkRC) isDuplicate = true;
+                            } else if (isRoMatch && isRcMatch) {
+                                // Cas très rare : parts RO et RC de montants identiques
+                                if (linkedFse.checkRO && linkedFse.checkRC) isDuplicate = true;
+                            } else if (isRoMatch && linkedFse.checkRO) {
+                                isDuplicate = true; // Tentative de payer RO, mais c'est déjà fait
+                            } else if (isRcMatch && linkedFse.checkRC) {
+                                isDuplicate = true; // Tentative de payer RC, mais c'est déjà fait
+                            }
 
                 // Si la FSE a été modifiée, on la prépare pour l'envoi à Supabase
                 if (changed) {
@@ -2110,6 +2103,19 @@ async function forceSyncNoemieToFse() {
     }
     
     document.body.style.cursor = 'default';
+}
+
+// Mise à jour du total NOEMIE en temps réel
+function updateNoemieTotal() {
+    let total = 0;
+    document.querySelectorAll('#noemieFacturesList .montant-input').forEach(input => {
+        let mVal = parseFloat((input.value || '0').replace(',', '.')) || 0;
+        total += mVal;
+    });
+    const displayEl = document.getElementById('noemieLiveTotal');
+    if (displayEl) {
+        displayEl.innerText = total.toFixed(2);
+    }
 }
 </script>
 </body>
