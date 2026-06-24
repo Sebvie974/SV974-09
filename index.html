@@ -1401,9 +1401,13 @@
 
             document.body.style.cursor = 'wait';
             
+            // ÉLIMINATION DES DOUBLONS : Si une FSE a été modifiée sur plusieurs lignes (ex: RO puis RC),
+            // on ne garde qu'une seule instance dans le tableau à envoyer à Supabase.
+            const uniqueFsesToUpdate = Array.from(new Set(fsesToUpdate));
+            
             const [resNoemie, resFse] = await Promise.all([
                 supabaseClient.from('noemie').upsert(mapNoemieToDb(targetNoemie)),
-                fsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(fsesToUpdate.map(mapFseToDb)) : Promise.resolve({ error: null })
+                uniqueFsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(uniqueFsesToUpdate.map(mapFseToDb)) : Promise.resolve({ error: null })
             ]);
             
             document.body.style.cursor = 'default';
