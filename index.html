@@ -1986,6 +1986,40 @@
             
             render(); updateDatalists();
         }
+
+    // ==========================================
+// GESTION DES REJETS
+// ==========================================
+async function toggleRejet(id) {
+    const item = fseList.find(f => f.id === id);
+    if (item && !item.isLocked && !item.isDefacture) { 
+        // Si on coche la case (passage en rejet)
+        if (!item.isRejet) { 
+            let motif = prompt("Motif du rejet :"); 
+            // Si l'utilisateur annule le prompt, on ne fait rien
+            if (motif !== null) { 
+                item.isRejet = true; 
+                item.motifRejet = motif || "Non précisé"; 
+            } 
+        } 
+        // Si on décoche la case (annulation du rejet)
+        else { 
+            item.isRejet = false; 
+            item.motifRejet = ""; 
+        }
+        
+        // Mise à jour de la base de données et de l'affichage
+        await dbUpdateFse(item); 
+        render(); 
+    }
+}
+
+function showRejetMotif(id) { 
+    const item = fseList.find(f => f.id === id); 
+    if (item && item.isRejet) {
+        alert("Motif de rejet :\n" + item.motifRejet); 
+    }
+}
 </script>
 </body>
 </html>
