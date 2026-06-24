@@ -1304,9 +1304,9 @@
             let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
 
             // ==========================================
-            // NOUVEAU : VÉRIFICATION DES DOUBLONS NOEMIE
+            // NOUVEAU : VÉRIFICATION INTELLIGENTE (RO/RC)
             // ==========================================
-            if (!currentNoemieEditId) { // Uniquement pour les nouvelles saisies
+            if (!currentNoemieEditId) { 
                 let duplicateReleve = false;
                 let duplicateFSEs = [];
                 const releveVal = document.getElementById('n_releve').value.trim();
@@ -1316,23 +1316,46 @@
                     duplicateReleve = noemieList.some(n => n.releve === releveVal);
                 }
 
-                // 2. Vérifie si les FSE saisies ont déjà été pointées dans un autre retour
+                // 2. Vérifie si les parts (RO ou RC) ont DÉJÀ été pointées
                 document.querySelectorAll('#noemieFacturesList .facture-row').forEach(row => {
                     let fVal = row.querySelector('.fse-input').value.trim().toUpperCase();
+                    let mVal = parseFloat((row.querySelector('.montant-input').value || '0').replace(',', '.')) || 0;
+
                     if (fVal && fVal !== '-') {
-                        const existsInNoemie = noemieList.some(n => n.factures && n.factures.some(f => f.fse === fVal));
-                        if (existsInNoemie) duplicateFSEs.push(fVal);
+                        const linkedFse = fseList.find(f => f.numFSE === fVal && !f.isDefacture);
+                        if (linkedFse) {
+                            let isDuplicate = false;
+                            
+                            const isRoMatch = mVal > 0 && Math.abs(mVal - linkedFse.partRO) <= 0.01;
+                            const isRcMatch = mVal > 0 && Math.abs(mVal - linkedFse.partRC) <= 0.01;
+                            const isGlobalMatch = mVal > 0 && Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
+
+                            if (isRoMatch && isRcMatch) {
+                                // Cas rare : parts RO et RC de montants identiques. Doublon uniquement si TOUT est déjà payé.
+                                if (linkedFse.checkRO && linkedFse.checkRC) isDuplicate = true;
+                            } else if (isGlobalMatch && (linkedFse.checkRO || linkedFse.checkRC)) {
+                                isDuplicate = true; // Tentative de payer le total, mais une part est déjà validée
+                            } else if (isRoMatch && linkedFse.checkRO) {
+                                isDuplicate = true; // Tentative de payer RO, mais c'est déjà fait
+                            } else if (isRcMatch && linkedFse.checkRC) {
+                                isDuplicate = true; // Tentative de payer RC, mais c'est déjà fait
+                            } else if (linkedFse.isLocked) {
+                                isDuplicate = true; // FSE totalement soldée et verrouillée
+                            }
+
+                            if (isDuplicate) duplicateFSEs.push(fVal);
+                        }
                     }
                 });
 
-                // 3. Affichage de l'alerte bloquante si doublon
+                // 3. Affichage de l'alerte bloquante
                 if (duplicateReleve || duplicateFSEs.length > 0) {
                     let msg = "⚠️ ATTENTION - DOUBLON(S) POTENTIEL(S) :\n\n";
                     if (duplicateReleve) msg += `- Le Relevé N° ${releveVal} a déjà été enregistré.\n`;
-                    if (duplicateFSEs.length > 0) msg += `- Les factures suivantes sont déjà pointées dans un autre retour : ${duplicateFSEs.join(', ')}.\n`;
+                    if (duplicateFSEs.length > 0) msg += `- Les parts correspondantes de ces factures sont déjà pointées : ${duplicateFSEs.join(', ')}.\n`;
                     msg += "\nVoulez-vous vraiment forcer cet enregistrement ?";
                     
-                    if (!confirm(msg)) return; // On annule l'enregistrement si on clique sur "Annuler"
+                    if (!confirm(msg)) return; 
                 }
             }
             // ==========================================
@@ -1374,7 +1397,6 @@
 
             document.body.style.cursor = 'wait';
             
-            // Capture des réponses de Supabase pour afficher les erreurs si besoin
             const [resNoemie, resFse] = await Promise.all([
                 supabaseClient.from('noemie').upsert(mapNoemieToDb(targetNoemie)),
                 fsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(fsesToUpdate.map(mapFseToDb)) : Promise.resolve({ error: null })
@@ -1382,7 +1404,6 @@
             
             document.body.style.cursor = 'default';
 
-            // Alerte si Supabase bloque l'enregistrement
             if (resNoemie.error || resFse.error) {
                 const err = resNoemie.error || resFse.error;
                 console.error("Détails du refus Supabase :", err);
