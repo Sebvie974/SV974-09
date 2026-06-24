@@ -372,8 +372,8 @@
                     </div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-4 items-end mb-4">
-                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Date *</label><input type="date" id="n_date" tabindex="1" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
-                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Caisse / Mut</label><input type="text" id="n_caisse" tabindex="2" list="caissesList" placeholder="CPAM, MGEN..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
+                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Date *</label><input type="date" id="n_date" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
+                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Caisse / Mut</label><input type="text" id="n_caisse" list="caissesList" placeholder="CPAM, MGEN..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
                         <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Encaissé le</label><input type="date" tabindex="-1" id="n_encaisse" class="w-full border border-indigo-300 rounded p-2 text-sm focus:ring-indigo-500 shadow-sm bg-indigo-50/30"></div>
                         <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">N° Relevé</label><input type="text" tabindex="-1" id="n_releve" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
                         <div class="md:col-span-12"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Informations / Commentaire</label><input type="text" tabindex="-1" id="n_info" placeholder="Commentaire..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
@@ -384,16 +384,16 @@
                             <label class="block text-xs font-bold text-teal-800 uppercase pb-1">Factures du retour</label>
                             <div class="flex items-center gap-2">
                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Générer</label>
-                                <input type="number" id="nbNoemieFseToAdd" tabindex="3" value="1" min="1" class="w-16 border border-gray-300 rounded p-1 text-xs bg-white text-center shadow-sm focus:ring-teal-500">
-                                <button type="button" onclick="updateNbNoemieFseRows()" tabindex="4" class="text-[10px] font-bold bg-white text-teal-700 px-3 py-1.5 rounded hover:bg-teal-100 transition shadow-sm border border-teal-300">Ajouter</button>
+                                <input type="number" id="nbNoemieFseToAdd" value="1" min="1" class="w-16 border border-gray-300 rounded p-1 text-xs bg-white text-center shadow-sm focus:ring-teal-500">
+                                <button type="button" onclick="updateNbNoemieFseRows()" class="text-[10px] font-bold bg-white text-teal-700 px-3 py-1.5 rounded hover:bg-teal-100 transition shadow-sm border border-teal-300">Ajouter</button>
                             </div>
                         </div>
                         <div id="noemieFacturesList" class="space-y-2"></div>
                     </div>
                     
                     <div class="mt-6 flex justify-end gap-3">
-                        <button type="submit" id="btnSubmitNoemieNew" tabindex="6" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-md text-sm focus:ring-4 focus:ring-teal-300 outline-none">Enregistrer et Nouveau</button>
-                        <button type="submit" id="btnSubmitNoemieAction" tabindex="7" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-md text-sm focus:ring-4 focus:ring-emerald-300 outline-none">Sauvegarder et Pointer</button>
+                        <button type="submit" id="btnSubmitNoemieNew" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-md text-sm focus:ring-4 focus:ring-teal-300 outline-none">Enregistrer et Nouveau</button>
+                        <button type="submit" id="btnSubmitNoemieAction" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-md text-sm focus:ring-4 focus:ring-emerald-300 outline-none">Sauvegarder et Pointer</button>
                     </div>
                 </form>
             </div>
