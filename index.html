@@ -1811,9 +1811,15 @@
             const searchInput = document.getElementById('sImpayesText');
             const searchText = searchInput ? searchInput.value.toLowerCase() : '';
             
+            // NOUVEAU : Récupération du filtre praticien global
+            const gPrat = document.getElementById('globalPraticienFilter') ? document.getElementById('globalPraticienFilter').value : 'ALL';
+            
             // 1. On filtre la base de données
             let impayes = fseList.filter(f => {
                 if (f.isDefacture || f.isLocked) return false;
+                
+                // NOUVEAU : On cache la facture si elle n'appartient pas au praticien sélectionné
+                if (gPrat !== 'ALL' && f.praticien !== gPrat) return false;
                 
                 const roDu = f.checkRO ? 0 : f.partRO;
                 const rcDu = f.checkRC ? 0 : f.partRC;
@@ -1880,17 +1886,6 @@
                 `;
                 tbody.appendChild(tr);
             });
-        }
-
-        // Fonction pour gérer le clic sur l'en-tête des colonnes (Tri)
-        function setSortImpayes(col) {
-            if (impSort.col === col) {
-                impSort.order = impSort.order === 'asc' ? 'desc' : 'asc';
-            } else {
-                impSort.col = col;
-                impSort.order = 'asc'; // Par défaut ascendant sur une nouvelle colonne
-            }
-            renderImpayesTable();
         } 
 
         // ==========================================
