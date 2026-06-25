@@ -1799,7 +1799,99 @@
         function closeRetroRegulModal() { document.getElementById('retroRegulModal').classList.add('hidden'); }
         function openImpayesModal() { document.getElementById('impayesModal').classList.remove('hidden'); renderImpayesTable(); }
         function closeImpayesModal() { document.getElementById('impayesModal').classList.add('hidden'); }
-        function renderImpayesTable() {} 
+        // ==========================================
+        // AFFICHAGE DE LA LISTE GLOBALE DES IMPAYÉS
+        // ==========================================
+        function renderImpayesTable() {
+            const tbody = document.getElementById('impayesTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = ''; // On vide le tableau avant de le remplir
+
+            // Récupération de la recherche textuelle
+            const searchInput = document.getElementById('sImpayesText');
+            const searchText = searchInput ? searchInput.value.toLowerCase() : '';
+            
+            // 1. On filtre la base de données
+            let impayes = fseList.filter(f => {
+                if (f.isDefacture || f.isLocked) return false;
+                
+                const roDu = f.checkRO ? 0 : f.partRO;
+                const rcDu = f.checkRC ? 0 : f.partRC;
+                
+                if ((roDu + rcDu) <= 0) return false; // S'il ne doit rien, on ignore
+
+                // Si on a tapé une recherche
+                if (searchText) {
+                    const searchStr = `${f.patient} ${f.numFSE} ${f.mutuelle} ${f.caisse}`.toLowerCase();
+                    if (!searchStr.includes(searchText)) return false;
+                }
+                return true;
+            });
+
+            // 2. On trie les résultats
+            impayes.sort((a, b) => {
+                let valA, valB;
+                switch(impSort.col) {
+                    case 'date': valA = new Date(a.date).getTime(); valB = new Date(b.date).getTime(); break;
+                    case 'praticien': valA = a.praticien; valB = b.praticien; break;
+                    case 'patient': valA = a.patient; valB = b.patient; break;
+                    case 'numFSE': valA = a.numFSE; valB = b.numFSE; break;
+                    case 'mutuelle': valA = a.mutuelle; valB = b.mutuelle; break;
+                    case 'montant': 
+                        valA = (a.checkRO ? 0 : a.partRO) + (a.checkRC ? 0 : a.partRC); 
+                        valB = (b.checkRO ? 0 : b.partRO) + (b.checkRC ? 0 : b.partRC); 
+                        break;
+                    default: valA = new Date(a.date).getTime(); valB = new Date(b.date).getTime(); break;
+                }
+                if (valA < valB) return impSort.order === 'asc' ? -1 : 1;
+                if (valA > valB) return impSort.order === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            // 3. Affichage si aucun impayé
+            if (impayes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500 italic">Aucun impayé correspondant. 🎉</td></tr>';
+                return;
+            }
+
+            // 4. Génération des lignes HTML
+            impayes.forEach(f => {
+                const roDu = f.checkRO ? 0 : f.partRO;
+                const rcDu = f.checkRC ? 0 : f.partRC;
+                const totalDu = roDu + rcDu;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-rose-50 transition-colors border-b border-gray-100";
+                tr.innerHTML = `
+                    <td class="p-3 text-gray-700 font-medium">${new Date(f.date).toLocaleDateString('fr-FR')}</td>
+                    <td class="p-3">${getPraticienBadge(f.praticien)}</td>
+                    <td class="p-3 font-bold text-gray-800">${f.patient}</td>
+                    <td class="p-3 text-center font-mono text-emerald-700">${f.numFSE || '-'}</td>
+                    <td class="p-3 text-gray-600">
+                        <div class="truncate max-w-[120px]" title="${f.mutuelle}">${f.mutuelle || '-'}</div>
+                        <div class="text-[10px] text-indigo-500">${f.caisse || '-'}</div>
+                    </td>
+                    <td class="p-3 text-right font-black text-rose-600">
+                        ${totalDu.toFixed(2)} €
+                        <div class="text-[9px] font-normal text-rose-400 uppercase tracking-widest mt-0.5">
+                            ${roDu > 0 ? 'RO ' : ''}${rcDu > 0 ? 'RC' : ''}
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Fonction pour gérer le clic sur l'en-tête des colonnes (Tri)
+        function setSortImpayes(col) {
+            if (impSort.col === col) {
+                impSort.order = impSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                impSort.col = col;
+                impSort.order = 'asc'; // Par défaut ascendant sur une nouvelle colonne
+            }
+            renderImpayesTable();
+        } 
 
         // ==========================================
         // IMPORTATION DE SAUVEGARDE V1 VERS SUPABASE
