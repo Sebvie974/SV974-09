@@ -758,6 +758,36 @@
         </div>
     </div>
 
+    <div id="filteredImpayesModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center p-4 transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div class="bg-indigo-600 p-4 flex justify-between items-center text-white">
+                <h3 id="filteredImpayesTitle" class="font-bold text-lg flex items-center gap-2">Détails des Impayés</h3>
+                <button onclick="closeFilteredImpayesModal()" class="text-white hover:text-indigo-200 text-2xl leading-none outline-none">&times;</button>
+            </div>
+            
+            <div class="overflow-y-auto p-0 flex-1 bg-white">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead class="bg-gray-50 text-gray-500 sticky top-0 shadow-sm border-b border-gray-200 z-10">
+                        <tr>
+                            <th class="p-3 font-bold uppercase tracking-wider text-[10px]">Date</th>
+                            <th class="p-3 font-bold uppercase tracking-wider text-[10px] text-center">N° FSE</th>
+                            <th class="p-3 font-bold uppercase tracking-wider text-[10px]" id="filteredImpayesColAlt">Patient / Mutuelle</th>
+                            <th class="p-3 font-bold uppercase tracking-wider text-[10px] text-right">Reste à payer</th>
+                        </tr>
+                    </thead>
+                    <tbody id="filteredImpayesBody" class="divide-y divide-gray-100">
+                        </tbody>
+                </table>
+            </div>
+            
+            <div class="bg-gray-50 p-4 border-t border-gray-200 flex justify-between items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                <div class="text-gray-700 font-bold text-sm">Total dû : <span id="filteredImpayesTotal" class="text-rose-600 text-xl md:text-2xl ml-2 tracking-tight">0.00 €</span></div>
+                <button onclick="closeFilteredImpayesModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 px-6 rounded-lg transition shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-gray-400">Fermer</button>
+            </div>
+        </div>
+    </div>
+
     <datalist id="patientsList"></datalist>
     <datalist id="caissesList"></datalist>
     <datalist id="mutuellesList"></datalist>
@@ -1893,7 +1923,7 @@
                     <td class="p-3">${getPraticienBadge(f.praticien)}</td>
                     
                     <td class="p-3 font-bold text-gray-800 cursor-pointer hover:text-indigo-600 hover:underline" 
-                        onclick="filterImpayesBy('${safePatient}')" title="Voir tous les impayés de ce patient">
+                        onclick="showFilteredImpayesModal('patient', '${safePatient}')" title="Voir tous les impayés de ce patient">
                         ${f.patient}
                     </td>
                     
@@ -1904,7 +1934,7 @@
                     
                     <td class="p-3 text-gray-600">
                         <div class="truncate max-w-[120px] cursor-pointer hover:text-indigo-600 hover:underline" 
-                             onclick="filterImpayesBy('${safeMutuelle}')" title="Voir tous les impayés de cette mutuelle">
+                             onclick="showFilteredImpayesModal('mutuelle', '${safeMutuelle}')" title="Voir tous les impayés de cette mutuelle">
                              ${f.mutuelle || '-'}
                         </div>
                         <div class="text-[10px] text-indigo-500">${f.caisse || '-'}</div>
@@ -2316,6 +2346,87 @@ function updateNoemieTotal() {
         displayEl.innerText = total.toFixed(2);
     }
 }
+
+// ==========================================
+        // MODALE LISTE FILTRÉE (PATIENT OU MUTUELLE)
+        // ==========================================
+        function showFilteredImpayesModal(type, valeur) {
+            const tbody = document.getElementById('filteredImpayesBody');
+            const titleEl = document.getElementById('filteredImpayesTitle');
+            const colAltEl = document.getElementById('filteredImpayesColAlt');
+            const totalEl = document.getElementById('filteredImpayesTotal');
+            
+            if (!tbody || !valeur) return;
+            tbody.innerHTML = '';
+            
+            // 1. Filtrage strict selon le type cliqué
+            let filtered = fseList.filter(f => {
+                if (f.isDefacture || f.isLocked) return false;
+                const roDu = f.checkRO ? 0 : f.partRO;
+                const rcDu = f.checkRC ? 0 : f.partRC;
+                if ((roDu + rcDu) <= 0) return false;
+
+                if (type === 'patient') {
+                    return f.patient === valeur;
+                } else if (type === 'mutuelle') {
+                    const mut = f.mutuelle || '-';
+                    return mut === valeur;
+                }
+                return false;
+            });
+
+            // 2. Tri par date (les plus anciennes en haut, car ce sont les plus urgentes à relancer)
+            filtered.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // 3. Mise à jour des titres selon le contexte
+            if (type === 'patient') {
+                titleEl.innerHTML = `Impayés du patient : <span class="text-indigo-200 ml-1">${valeur}</span>`;
+                colAltEl.innerText = "Mutuelle / Caisse";
+            } else {
+                titleEl.innerHTML = `Impayés de la mutuelle : <span class="text-indigo-200 ml-1">${valeur}</span>`;
+                colAltEl.innerText = "Patient";
+            }
+
+            let totalList = 0;
+
+            // 4. Génération des lignes de la sous-liste
+            filtered.forEach(f => {
+                const roDu = f.checkRO ? 0 : f.partRO;
+                const rcDu = f.checkRC ? 0 : f.partRC;
+                const totalDu = roDu + rcDu;
+                totalList += totalDu;
+
+                // Contenu alternatif : Si on est sur un patient, on affiche sa mutuelle. Sinon, on affiche le patient.
+                const altContent = type === 'patient' 
+                    ? `<div class="font-semibold text-gray-700 truncate max-w-[150px]">${f.mutuelle || '-'}</div><div class="text-[10px] text-gray-500">${f.caisse || '-'}</div>`
+                    : `<div class="font-bold text-gray-800">${f.patient}</div>`;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-rose-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="p-3 text-gray-700">${new Date(f.date).toLocaleDateString('fr-FR')}</td>
+                    <td class="p-3 text-center">
+                        <span class="font-mono text-emerald-700 cursor-pointer hover:text-emerald-500 hover:underline" 
+                              onclick="showImpayesFseDetails('${f.id}')" title="Voir les détails de la facture">
+                            ${f.numFSE || '-'}
+                        </span>
+                    </td>
+                    <td class="p-3">${altContent}</td>
+                    <td class="p-3 text-right">
+                        <div class="font-black text-rose-600">${totalDu.toFixed(2)} €</div>
+                        <div class="text-[9px] font-normal text-rose-400 uppercase tracking-widest mt-0.5">${roDu > 0 ? 'RO ' : ''}${rcDu > 0 ? 'RC' : ''}</div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            totalEl.innerText = totalList.toFixed(2) + " €";
+            document.getElementById('filteredImpayesModal').classList.remove('hidden');
+        }
+
+        function closeFilteredImpayesModal() {
+            document.getElementById('filteredImpayesModal').classList.add('hidden');
+        }
 </script>
 </body>
 </html>
