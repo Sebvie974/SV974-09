@@ -1866,17 +1866,34 @@
                 const rcDu = f.checkRC ? 0 : f.partRC;
                 const totalDu = roDu + rcDu;
 
+                // Sécurisation des noms avec apostrophes (ex: "L'Oréal" ou "D'Arc") pour éviter de casser le code HTML
+                const safePatient = (f.patient || '').replace(/'/g, "\\'");
+                const safeMutuelle = (f.mutuelle || '').replace(/'/g, "\\'");
+
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-rose-50 transition-colors border-b border-gray-100";
                 tr.innerHTML = `
                     <td class="p-3 text-gray-700 font-medium">${new Date(f.date).toLocaleDateString('fr-FR')}</td>
                     <td class="p-3">${getPraticienBadge(f.praticien)}</td>
-                    <td class="p-3 font-bold text-gray-800">${f.patient}</td>
-                    <td class="p-3 text-center font-mono text-emerald-700">${f.numFSE || '-'}</td>
+                    
+                    <td class="p-3 font-bold text-gray-800 cursor-pointer hover:text-indigo-600 hover:underline" 
+                        onclick="filterImpayesBy('${safePatient}')" title="Voir tous les impayés de ce patient">
+                        ${f.patient}
+                    </td>
+                    
+                    <td class="p-3 text-center font-mono text-emerald-700 cursor-pointer hover:text-emerald-500 hover:underline" 
+                        onclick="showImpayesFseDetails('${f.id}')" title="Voir les détails de la facture">
+                        ${f.numFSE || '-'}
+                    </td>
+                    
                     <td class="p-3 text-gray-600">
-                        <div class="truncate max-w-[120px]" title="${f.mutuelle}">${f.mutuelle || '-'}</div>
+                        <div class="truncate max-w-[120px] cursor-pointer hover:text-indigo-600 hover:underline" 
+                             onclick="filterImpayesBy('${safeMutuelle}')" title="Voir tous les impayés de cette mutuelle">
+                             ${f.mutuelle || '-'}
+                        </div>
                         <div class="text-[10px] text-indigo-500">${f.caisse || '-'}</div>
                     </td>
+                    
                     <td class="p-3 text-right font-black text-rose-600">
                         ${totalDu.toFixed(2)} €
                         <div class="text-[9px] font-normal text-rose-400 uppercase tracking-widest mt-0.5">
@@ -1886,7 +1903,51 @@
                 `;
                 tbody.appendChild(tr);
             });
-        } 
+        }
+        
+        // ==========================================
+        // ACTIONS CLIC : FILTRE ET DÉTAILS IMPAYÉS
+        // ==========================================
+
+        // Fonction pour filtrer automatiquement par patient ou mutuelle
+        function filterImpayesBy(texte) {
+            const searchInput = document.getElementById('sImpayesText');
+            if (searchInput && texte) {
+                searchInput.value = texte; // Injecte le texte dans la barre de recherche
+                renderImpayesTable();      // Rafraîchit le tableau
+            }
+        }
+
+        // Fonction pour afficher le résumé complet d'une facture
+        function showImpayesFseDetails(id) {
+            const f = fseList.find(x => x.id === id);
+            if (!f) return;
+            
+            const roDu = f.checkRO ? 0 : f.partRO;
+            const rcDu = f.checkRC ? 0 : f.partRC;
+            const totalDu = roDu + rcDu;
+
+            // Construit un résumé propre pour la facture
+            const message = `
+            📝 DÉTAILS DE LA FACTURE
+
+👤 Patient : ${f.patient}
+📅 Date : ${new Date(f.date).toLocaleDateString('fr-FR')}
+🩺 Praticien : ${f.praticien}
+
+🔢 N° FSE : ${f.numFSE || '-'}
+📦 N° Lot : ${f.lot || '-'}
+🏦 Caisse : ${f.caisse || '-'}
+🛡️ Mutuelle : ${f.mutuelle || '-'}
+
+💰 Montant RO : ${f.partRO.toFixed(2)} € ${f.checkRO ? '✅ (Payé)' : '❌ (Dû)'}
+💰 Montant RC : ${f.partRC.toFixed(2)} € ${f.checkRC ? '✅ (Payé)' : '❌ (Dû)'}
+
+🚨 RESTE À PAYER : ${totalDu.toFixed(2)} €
+            `;
+
+            alert(message.trim());
+        }
 
         // ==========================================
         // IMPORTATION DE SAUVEGARDE V1 VERS SUPABASE
