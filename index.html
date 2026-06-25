@@ -742,6 +742,22 @@
         </div>
     </div>
 
+    <div id="fseDetailsModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center p-4 transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div class="bg-indigo-600 p-4 flex justify-between items-center text-white">
+                <h3 class="font-bold text-lg flex items-center gap-2">Détails de la Facture</h3>
+                <button onclick="closeFseDetailsModal()" class="text-white hover:text-indigo-200 text-2xl leading-none outline-none">&times;</button>
+            </div>
+            
+            <div class="p-5 space-y-4 text-sm" id="fseDetailsContent">
+                </div>
+            
+            <div class="bg-gray-50 p-4 border-t border-gray-100 flex justify-end">
+                <button onclick="closeFseDetailsModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 px-6 rounded-lg transition shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-gray-400">Fermer</button>
+            </div>
+        </div>
+    </div>
+
     <datalist id="patientsList"></datalist>
     <datalist id="caissesList"></datalist>
     <datalist id="mutuellesList"></datalist>
@@ -1918,7 +1934,9 @@
             }
         }
 
-        // Fonction pour afficher le résumé complet d'une facture
+        // ==========================================
+        // AFFICHAGE DES DÉTAILS D'UNE FACTURE (MODALE)
+        // ==========================================
         function showImpayesFseDetails(id) {
             const f = fseList.find(x => x.id === id);
             if (!f) return;
@@ -1927,26 +1945,58 @@
             const rcDu = f.checkRC ? 0 : f.partRC;
             const totalDu = roDu + rcDu;
 
-            // Construit un résumé propre pour la facture
-            const message = `
-            📝 DÉTAILS DE LA FACTURE
+            const contentDiv = document.getElementById('fseDetailsContent');
+            if (!contentDiv) return;
 
-👤 Patient : ${f.patient}
-📅 Date : ${new Date(f.date).toLocaleDateString('fr-FR')}
-🩺 Praticien : ${f.praticien}
-
-🔢 N° FSE : ${f.numFSE || '-'}
-📦 N° Lot : ${f.lot || '-'}
-🏦 Caisse : ${f.caisse || '-'}
-🛡️ Mutuelle : ${f.mutuelle || '-'}
-
-💰 Montant RO : ${f.partRO.toFixed(2)} € ${f.checkRO ? '✅ (Payé)' : '❌ (Dû)'}
-💰 Montant RC : ${f.partRC.toFixed(2)} € ${f.checkRC ? '✅ (Payé)' : '❌ (Dû)'}
-
-🚨 RESTE À PAYER : ${totalDu.toFixed(2)} €
+            // Construction du contenu HTML avec la charte graphique
+            contentDiv.innerHTML = `
+                <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                    <span class="text-gray-500 uppercase text-xs font-bold tracking-wider">Patient</span>
+                    <span class="font-black text-gray-800 text-lg">${f.patient}</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                    <div>
+                        <span class="block text-gray-500 uppercase text-[10px] font-bold tracking-wider mb-0.5">Date</span>
+                        <span class="font-bold text-gray-700">${new Date(f.date).toLocaleDateString('fr-FR')}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="block text-gray-500 uppercase text-[10px] font-bold tracking-wider mb-0.5">Praticien</span>
+                        <span class="font-bold text-gray-700">${f.praticien}</span>
+                    </div>
+                </div>
+                
+                <div class="bg-indigo-50/70 p-3.5 rounded-lg border border-indigo-100 grid grid-cols-2 gap-y-3 text-xs shadow-inner">
+                    <div><span class="text-indigo-400 font-bold uppercase text-[10px]">N° FSE</span><br><span class="font-mono text-indigo-700 font-bold text-sm">${f.numFSE || '-'}</span></div>
+                    <div class="text-right"><span class="text-indigo-400 font-bold uppercase text-[10px]">Lot</span><br><span class="font-mono text-gray-700 font-semibold">${f.lot || '-'}</span></div>
+                    <div><span class="text-indigo-400 font-bold uppercase text-[10px]">Caisse</span><br><span class="text-gray-700 font-semibold">${f.caisse || '-'}</span></div>
+                    <div class="text-right"><span class="text-indigo-400 font-bold uppercase text-[10px]">Mutuelle</span><br><span class="text-gray-700 font-semibold truncate max-w-[120px] inline-block align-bottom" title="${f.mutuelle}">${f.mutuelle || '-'}</span></div>
+                </div>
+                
+                <div class="space-y-2.5 pt-1">
+                    <div class="flex justify-between items-center px-2">
+                        <span class="text-gray-600 font-semibold">Part RO <span class="text-gray-400 font-normal">(${f.partRO.toFixed(2)} €)</span></span>
+                        ${f.checkRO ? '<span class="text-emerald-600 font-bold text-[10px] uppercase tracking-wider bg-emerald-100 px-2 py-1 rounded shadow-sm">Payé</span>' : '<span class="text-rose-600 font-bold text-[10px] uppercase tracking-wider bg-rose-100 px-2 py-1 rounded shadow-sm">En attente</span>'}
+                    </div>
+                    <div class="flex justify-between items-center px-2">
+                        <span class="text-gray-600 font-semibold">Part RC <span class="text-gray-400 font-normal">(${f.partRC.toFixed(2)} €)</span></span>
+                        ${f.checkRC ? '<span class="text-emerald-600 font-bold text-[10px] uppercase tracking-wider bg-emerald-100 px-2 py-1 rounded shadow-sm">Payé</span>' : '<span class="text-rose-600 font-bold text-[10px] uppercase tracking-wider bg-rose-100 px-2 py-1 rounded shadow-sm">En attente</span>'}
+                    </div>
+                </div>
+                
+                <div class="bg-rose-50 border border-rose-200 p-3.5 rounded-lg flex justify-between items-center mt-2 shadow-sm">
+                    <span class="text-rose-800 font-bold uppercase text-xs tracking-wider">Reste à payer</span>
+                    <span class="text-rose-700 font-black text-xl">${totalDu.toFixed(2)} €</span>
+                </div>
             `;
 
-            alert(message.trim());
+            // Affiche la modale
+            document.getElementById('fseDetailsModal').classList.remove('hidden');
+        }
+
+        // Fonction pour fermer la modale
+        function closeFseDetailsModal() {
+            document.getElementById('fseDetailsModal').classList.add('hidden');
         }
 
         // ==========================================
