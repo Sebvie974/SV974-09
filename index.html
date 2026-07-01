@@ -451,7 +451,10 @@
                         </div>
                         <div>
                             <label class="block text-[10px] md:text-xs font-bold text-gray-600 uppercase mb-1">Mt Rempla. (€) *</label>
-                            <input type="number" step="0.01" id="retroRemplacant" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm" placeholder="0.00">
+                            <input type="number" step="0.01" id="retroRemplacant" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm" placeholder="0.00" onblur="checkRemplacantAmount(this)">
+                            
+                            <input type="hidden" id="retroNomRemplacant" value="">
+                            <div id="displayNomRemplacant" class="text-[10px] text-purple-600 font-bold mt-1 hidden"></div>
                         </div>
                     </div>
                     
@@ -792,6 +795,23 @@
             <div class="bg-gray-50 p-4 border-t border-gray-200 flex justify-between items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                 <div class="text-gray-700 font-bold text-sm">Total dû : <span id="filteredImpayesTotal" class="text-rose-600 text-xl md:text-2xl ml-2 tracking-tight">0.00 €</span></div>
                 <button onclick="closeFilteredImpayesModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 px-6 rounded-lg transition shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-gray-400">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="remplacantModal" class="hidden fixed inset-0 z-[60] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div class="bg-purple-600 p-4 flex justify-between items-center text-white">
+                <h3 class="font-bold text-lg">Nom du Remplaçant</h3>
+                <button type="button" onclick="closeRemplacantModal()" class="text-white hover:text-purple-200 text-2xl leading-none outline-none">&times;</button>
+            </div>
+            <div class="p-5">
+                <label class="block text-sm font-bold text-gray-700 mb-2">Veuillez indiquer le nom du remplaçant :</label>
+                <input type="text" id="nomRemplacantInput" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm" placeholder="Ex: Dr. Martin">
+            </div>
+            <div class="bg-gray-50 p-4 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" onclick="closeRemplacantModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition shadow-sm text-sm">Annuler</button>
+                <button type="button" onclick="validateRemplacantName()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-sm text-sm">Valider</button>
             </div>
         </div>
     </div>
@@ -1666,6 +1686,43 @@
         }
         function closeRetroModal() { document.getElementById('retroModal').classList.add('hidden'); }
 
+        // ==========================================
+        // GESTION DU NOM DU REMPLAÇANT
+        // ==========================================
+        function checkRemplacantAmount(input) {
+            const val = parseFloat(input.value) || 0;
+            const currentName = document.getElementById('retroNomRemplacant').value;
+            
+            // Si le montant est positif et qu'aucun nom n'est défini, on ouvre la modale
+            if (val > 0 && !currentName) {
+                document.getElementById('nomRemplacantInput').value = '';
+                document.getElementById('remplacantModal').classList.remove('hidden');
+                setTimeout(() => document.getElementById('nomRemplacantInput').focus(), 100);
+            } 
+            // Si le montant est remis à 0, on efface le nom
+            else if (val === 0) {
+                document.getElementById('retroNomRemplacant').value = '';
+                document.getElementById('displayNomRemplacant').classList.add('hidden');
+            }
+        }
+
+        function validateRemplacantName() {
+            const nom = document.getElementById('nomRemplacantInput').value.trim();
+            if (nom) {
+                document.getElementById('retroNomRemplacant').value = nom;
+                const display = document.getElementById('displayNomRemplacant');
+                display.innerText = "🧑‍⚕️ " + nom;
+                display.classList.remove('hidden');
+                closeRemplacantModal();
+            } else {
+                alert("Veuillez saisir un nom.");
+            }
+        }
+
+        function closeRemplacantModal() {
+            document.getElementById('remplacantModal').classList.add('hidden');
+        }
+
         function saveRetro(e) {
             e.preventDefault();
             
@@ -1689,6 +1746,7 @@
                 
                 kine: parseFloat(document.getElementById('retroKine').value) || 0, 
                 remplacant: parseFloat(document.getElementById('retroRemplacant').value) || 0, 
+                nomRemplacant: document.getElementById('retroNomRemplacant').value || "",
                 paye: parseFloat(document.getElementById('retroPaye').value) || 0, 
                 datePaiement: document.getElementById('retroDatePaiement').value || "", 
                 regKine: null, 
@@ -1714,6 +1772,8 @@
             updateYearsDatalist(); 
             closeRetroModal(); 
             renderRetros();
+
+            document.getElementById('retroNomRemplacant').value = ''; document.getElementById('displayNomRemplacant').classList.add('hidden');
         }
 
         function editRetro(id) {
@@ -1758,11 +1818,22 @@
                 
                 let kineHtml = `${r.kine.toFixed(2)}€`;
                 let remplHtml = `${r.remplacant.toFixed(2)}€`;
+                // NOUVEAU : On ajoute le nom sous le montant s'il existe
+                if (r.remplacant > 0 && r.nomRemplacant) {
+                    remplHtml += `<br><span class="text-[9px] text-purple-600 font-bold uppercase tracking-wider">${r.nomRemplacant}</span>`;
+                }
+                
                 let totalHtml = `${(r.kine+r.remplacant).toFixed(2)}€`;
                 
                 if (isRegul) { 
                     kineHtml = `<s class="text-gray-400 text-[10px]">${r.kine.toFixed(2)}</s><br><span class="text-orange-700 font-bold">${realKine.toFixed(2)}€</span>`; 
+                    
                     remplHtml = `<s class="text-gray-400 text-[10px]">${r.remplacant.toFixed(2)}</s><br><span class="text-orange-700 font-bold">${realRempl.toFixed(2)}€</span>`;
+                    // NOUVEAU : On garde l'affichage du nom même après une régularisation
+                    if (r.remplacant > 0 && r.nomRemplacant) {
+                        remplHtml += `<br><span class="text-[9px] text-purple-600 font-bold uppercase tracking-wider">${r.nomRemplacant}</span>`;
+                    }
+
                     totalHtml = `<s class="text-gray-400 text-[10px]">${(r.kine+r.remplacant).toFixed(2)}</s><br><span class="text-orange-700 font-black">${totalFSE.toFixed(2)}€</span>`; 
                 }
 
