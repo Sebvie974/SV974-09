@@ -2925,7 +2925,7 @@ function updateNoemieTotal() {
             currentRegulId = null;
         }
 
-        // --- 3. Modale Bilan Annuel (Avec Infos Praticien/Année) ---
+        // --- 3. Modale Bilan Annuel (Avec Infos Praticien/Année et Tableau) ---
         function openRetroBilanModal() { 
             const gPrat = document.getElementById('globalPraticienFilter').value;
             const filterYear = document.getElementById('yearFilter').value;
@@ -2948,36 +2948,89 @@ function updateNoemieTotal() {
                 subtitleEl.innerHTML = `Bilan <strong>${filterYear}</strong> • <span class="text-white bg-purple-800/50 px-2 py-0.5 rounded shadow-inner ml-1">${praticienNom}</span>`;
             }
 
+            // Préparation pour l'impression éventuelle
+            const printSubtitle = document.getElementById('printBilanDetails');
+            if (printSubtitle) printSubtitle.innerText = `Année : ${filterYear} - Praticien : ${praticienNom}`;
+
+            // Filtrage des données
             let filtered = retroList.filter(r => { 
                 if (gPrat !== 'ALL' && r.praticien !== gPrat) return false; 
                 if (r.annee.toString() !== filterYear) return false; 
                 return true; 
             });
 
-            let totalKine = 0, totalRemplacant = 0, totalPaye = 0;
-            
+            // Tri par ordre chronologique (du mois 1 au mois 12)
+            filtered.sort((a,b) => parseInt(a.mois) - parseInt(b.mois));
+
+            // Variables pour les totaux
+            let origKine = 0, origRempl = 0;
+            let regKine = 0, regRempl = 0;
+            let totalPaye = 0;
+
+            // Remplissage du tableau mois par mois
+            const tbody = document.getElementById('retroBilanMonthsBody');
+            if (tbody) tbody.innerHTML = '';
+
             filtered.forEach(r => {
+                // Cumul des totaux d'origine (estimés)
+                origKine += r.kine;
+                origRempl += r.remplacant;
+                
+                // Détermination et cumul des totaux réels (régularisés)
                 const realKine = (r.regKine !== null && r.regKine !== undefined) ? r.regKine : r.kine;
                 const realRempl = (r.regRemplacant !== null && r.regRemplacant !== undefined) ? r.regRemplacant : r.remplacant;
-                totalKine += realKine;
-                totalRemplacant += realRempl;
+                
+                regKine += realKine;
+                regRempl += realRempl;
                 totalPaye += r.paye;
+
+                // Calculs pour la ligne du mois
+                const totalFseMois = realKine + realRempl;
+                const soldeMois = totalFseMois - r.paye;
+                const moisNom = nomsMois[parseInt(r.mois)-1] || r.mois;
+
+                // Création de la ligne HTML du tableau
+                if (tbody) {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-purple-50/50 transition-colors text-sm";
+                    tr.innerHTML = `
+                        <td class="p-2 font-bold text-gray-700">${moisNom}</td>
+                        <td class="p-2 text-right font-mono">${realKine.toFixed(2)} €</td>
+                        <td class="p-2 text-right font-mono">${realRempl.toFixed(2)} €</td>
+                        <td class="p-2 text-right font-mono font-bold text-purple-900 bg-purple-50/50">${totalFseMois.toFixed(2)} €</td>
+                        <td class="p-2 text-right font-mono text-emerald-600">${r.paye.toFixed(2)} €</td>
+                        <td class="p-2 text-right font-mono font-bold ${soldeMois !== 0 ? 'text-rose-600' : 'text-emerald-500'}">${soldeMois.toFixed(2)} €</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
             });
 
-            const totalCA = totalKine + totalRemplacant;
-            const solde = totalCA - totalPaye;
+            // Injection des totaux dans les différentes cases de l'interface
+            const origTotal = origKine + origRempl;
+            const regTotal = regKine + regRempl;
+            const soldeFinal = regTotal - totalPaye;
 
-            if (document.getElementById('bilanTotalCA')) document.getElementById('bilanTotalCA').innerText = totalCA.toFixed(2) + ' €';
-            if (document.getElementById('bilanTotalKine')) document.getElementById('bilanTotalKine').innerText = totalKine.toFixed(2) + ' €';
-            if (document.getElementById('bilanTotalRemplacant')) document.getElementById('bilanTotalRemplacant').innerText = totalRemplacant.toFixed(2) + ' €';
-            if (document.getElementById('bilanTotalPaye')) document.getElementById('bilanTotalPaye').innerText = totalPaye.toFixed(2) + ' €';
+            // Totaux Estimés
+            if(document.getElementById('bilanOrigKine')) document.getElementById('bilanOrigKine').innerText = origKine.toFixed(2) + ' €';
+            if(document.getElementById('bilanOrigRempl')) document.getElementById('bilanOrigRempl').innerText = origRempl.toFixed(2) + ' €';
+            if(document.getElementById('bilanOrigTotal')) document.getElementById('bilanOrigTotal').innerText = origTotal.toFixed(2) + ' €';
+
+            // Totaux Réels
+            if(document.getElementById('bilanRegKine')) document.getElementById('bilanRegKine').innerText = regKine.toFixed(2) + ' €';
+            if(document.getElementById('bilanRegRempl')) document.getElementById('bilanRegRempl').innerText = regRempl.toFixed(2) + ' €';
+            if(document.getElementById('bilanRegTotal')) document.getElementById('bilanRegTotal').innerText = regTotal.toFixed(2) + ' €';
+
+            // Payé et Solde
+            if(document.getElementById('bilanTotalPaye')) document.getElementById('bilanTotalPaye').innerText = totalPaye.toFixed(2) + ' €';
             
-            const elSolde = document.getElementById('bilanSolde');
-            if (elSolde) {
-                elSolde.innerText = solde.toFixed(2) + ' €';
-                elSolde.className = solde > 0 ? "text-rose-600 font-black text-xl" : "text-emerald-600 font-black text-xl";
+            const elSoldeFinal = document.getElementById('bilanSoldeFinal');
+            if (elSoldeFinal) {
+                elSoldeFinal.innerText = soldeFinal.toFixed(2) + ' €';
+                // La couleur s'adapte automatiquement s'il y a un reste à payer
+                elSoldeFinal.className = soldeFinal > 0 ? "text-3xl font-mono font-black text-rose-600" : "text-3xl font-mono font-black text-emerald-600";
             }
 
+            // Ouverture de la modale
             const modal = document.getElementById('retroBilanModal');
             if (modal) modal.classList.remove('hidden');
         }
