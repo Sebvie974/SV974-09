@@ -2707,24 +2707,6 @@ function updateNoemieTotal() {
             }
         }
 
-        // 3. Modale de Régularisation
-        let currentRegulId = null;
-        function openRegulModal(id) {
-            const r = retroList.find(x => x.id === id);
-            if (!r) return;
-            
-            currentRegulId = id;
-            
-            // On injecte les valeurs actuelles dans les cases de la modale de régularisation
-            const kineInput = document.getElementById('regulKine');
-            const remplInput = document.getElementById('regulRemplacant');
-            
-            if (kineInput) kineInput.value = r.regKine !== null ? r.regKine : r.kine;
-            if (remplInput) remplInput.value = r.regRemplacant !== null ? r.regRemplacant : r.remplacant;
-
-            document.getElementById('retroRegulModal').classList.remove('hidden');
-        }
-
         // Sauvegarde de la Régularisation
         function saveRegul(e) {
             if (e) e.preventDefault();
@@ -2797,6 +2779,210 @@ function updateNoemieTotal() {
         }
 
         function closeRetroBilan() {
+            const modal = document.getElementById('retroBilanModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        // ==========================================
+        // ACTIONS RAPIDES SUR LES FSE
+        // ==========================================
+        
+        async function toggleLock(id) { 
+            const item = fseList.find(f => f.id === id);
+            if (item) { 
+                item.isLocked = !item.isLocked; 
+                await supabaseClient.from('fse').upsert(typeof mapFseToDb === 'function' ? mapFseToDb(item) : item); 
+                render(); 
+            } 
+        }
+
+        async function editFse(id) {
+            const item = fseList.find(f => f.id === id);
+            if (item && !item.isLocked && !item.isDefacture) {
+                document.getElementById('fseDate').value = item.date;
+                document.getElementById('fseLot').value = item.lot;
+                document.getElementById('fseCaisse').value = item.caisse || '';
+                
+                const chkDegrade = document.getElementById('fseDegradeLot');
+                if (chkDegrade) chkDegrade.checked = item.isDegrade || false;
+                
+                const list = document.getElementById('fseFacturesList');
+                list.innerHTML = ''; 
+                addFseRow(item.numFSE, item.patient, item.partRO, item.partRC);
+                
+                currentEditId = id; 
+                const title = document.getElementById('fseFormTitle');
+                if (title) title.innerText = "Modifier la Facture";
+                
+                document.getElementById('fseModal').classList.remove('hidden');
+            }
+        }
+
+        async function toggleCheck(id, type) {
+            const item = fseList.find(f => f.id === id);
+            if (item && !item.isLocked && !item.isDefacture) { 
+                if (type === 'RO') item.checkRO = !item.checkRO;
+                if (type === 'RC') item.checkRC = !item.checkRC; 
+                item.isLocked = (item.checkRO && item.checkRC);
+                await supabaseClient.from('fse').upsert(typeof mapFseToDb === 'function' ? mapFseToDb(item) : item); 
+                render();
+            }
+        }
+
+        // ==========================================
+        // ACTIONS & MODALES RÉTROCESSIONS
+        // ==========================================
+
+        // --- 1. Édition et Suppression ---
+        function editRetro(id) {
+            const r = retroList.find(x => x.id === id);
+            if (r) {
+                document.getElementById('retroAnnee').value = r.annee;
+                document.getElementById('retroMois').value = r.mois;
+                document.getElementById('retroTauxCab').value = r.tauxCab !== undefined ? r.tauxCab : (r.taux || 0);
+                document.getElementById('retroTauxDom').value = r.tauxDom || 0;
+                document.getElementById('retroKine').value = r.kine;
+                document.getElementById('retroRemplacant').value = r.remplacant;
+                
+                const nomInput = document.getElementById('retroNomRemplacant');
+                const display = document.getElementById('displayNomRemplacant');
+                if (nomInput && display) {
+                    nomInput.value = r.nomRemplacant || '';
+                    if (r.nomRemplacant) {
+                        display.innerText = "🧑‍⚕️ " + r.nomRemplacant;
+                        display.classList.remove('hidden');
+                    } else {
+                        display.classList.add('hidden');
+                    }
+                }
+
+                document.getElementById('retroPaye').value = r.paye;
+                document.getElementById('retroDatePaiement').value = r.datePaiement || '';
+
+                currentRetroEditId = id;
+                const titleEl = document.getElementById('retroModalTitle');
+                if (titleEl) titleEl.innerText = "Modifier Rétrocession";
+                
+                document.getElementById('retroModal').classList.remove('hidden');
+            }
+        }
+
+        function deleteRetro(id) {
+            if (confirm("Êtes-vous sûr de vouloir supprimer cette rétrocession ?")) {
+                retroList = retroList.filter(r => r.id !== id);
+                localStorage.setItem('retro_data', JSON.stringify(retroList));
+                renderRetros();
+            }
+        }
+
+        // --- 2. Modale de Régularisation ---
+        let currentRegulId = null;
+        
+        function openRegulModal(id) {
+            const r = retroList.find(x => x.id === id);
+            if (!r) return;
+            currentRegulId = id;
+            
+            const kineInput = document.getElementById('regKineInput');
+            const remplInput = document.getElementById('regRemplacantInput');
+            
+            if (kineInput) kineInput.value = (r.regKine !== null && r.regKine !== undefined) ? r.regKine : r.kine;
+            if (remplInput) remplInput.value = (r.regRemplacant !== null && r.regRemplacant !== undefined) ? r.regRemplacant : r.remplacant;
+
+            document.getElementById('retroRegulModal').classList.remove('hidden');
+        }
+
+        function saveRegulRetro() {
+            if (!currentRegulId) return;
+            const r = retroList.find(x => x.id === currentRegulId);
+            if (r) {
+                const valKine = parseFloat(document.getElementById('regKineInput').value);
+                const valRempl = parseFloat(document.getElementById('regRemplacantInput').value);
+                
+                r.regKine = isNaN(valKine) ? null : valKine;
+                r.regRemplacant = isNaN(valRempl) ? null : valRempl;
+                
+                localStorage.setItem('retro_data', JSON.stringify(retroList));
+                renderRetros();
+                closeRetroRegulModal();
+            }
+        }
+
+        function clearRegulRetro() {
+            if (!currentRegulId) return;
+            const r = retroList.find(x => x.id === currentRegulId);
+            if (r) {
+                r.regKine = null;
+                r.regRemplacant = null;
+                localStorage.setItem('retro_data', JSON.stringify(retroList));
+                renderRetros();
+                closeRetroRegulModal();
+            }
+        }
+
+        function closeRetroRegulModal() {
+            document.getElementById('retroRegulModal').classList.add('hidden');
+            currentRegulId = null;
+        }
+
+        // --- 3. Modale Bilan Annuel (Avec Infos Praticien/Année) ---
+        function openRetroBilanModal() { 
+            const gPrat = document.getElementById('globalPraticienFilter').value;
+            const filterYear = document.getElementById('yearFilter').value;
+            
+            if (filterYear === 'ALL') {
+                alert("Veuillez sélectionner une année spécifique dans le menu déroulant en haut de l'écran pour voir le bilan.");
+                return;
+            }
+
+            // Récupération du nom formaté du praticien
+            let praticienNom = "Tous les Praticiens";
+            if (gPrat !== 'ALL') {
+                const pratSelect = document.getElementById('globalPraticienFilter');
+                praticienNom = pratSelect.options[pratSelect.selectedIndex].text.replace('👨‍⚕️ ', '').trim();
+            }
+
+            // Mise à jour du sous-titre de la modale
+            const subtitleEl = document.getElementById('retroBilanSubtitle');
+            if (subtitleEl) {
+                subtitleEl.innerHTML = `Bilan <strong>${filterYear}</strong> • <span class="text-white bg-purple-800/50 px-2 py-0.5 rounded shadow-inner ml-1">${praticienNom}</span>`;
+            }
+
+            let filtered = retroList.filter(r => { 
+                if (gPrat !== 'ALL' && r.praticien !== gPrat) return false; 
+                if (r.annee.toString() !== filterYear) return false; 
+                return true; 
+            });
+
+            let totalKine = 0, totalRemplacant = 0, totalPaye = 0;
+            
+            filtered.forEach(r => {
+                const realKine = (r.regKine !== null && r.regKine !== undefined) ? r.regKine : r.kine;
+                const realRempl = (r.regRemplacant !== null && r.regRemplacant !== undefined) ? r.regRemplacant : r.remplacant;
+                totalKine += realKine;
+                totalRemplacant += realRempl;
+                totalPaye += r.paye;
+            });
+
+            const totalCA = totalKine + totalRemplacant;
+            const solde = totalCA - totalPaye;
+
+            if (document.getElementById('bilanTotalCA')) document.getElementById('bilanTotalCA').innerText = totalCA.toFixed(2) + ' €';
+            if (document.getElementById('bilanTotalKine')) document.getElementById('bilanTotalKine').innerText = totalKine.toFixed(2) + ' €';
+            if (document.getElementById('bilanTotalRemplacant')) document.getElementById('bilanTotalRemplacant').innerText = totalRemplacant.toFixed(2) + ' €';
+            if (document.getElementById('bilanTotalPaye')) document.getElementById('bilanTotalPaye').innerText = totalPaye.toFixed(2) + ' €';
+            
+            const elSolde = document.getElementById('bilanSolde');
+            if (elSolde) {
+                elSolde.innerText = solde.toFixed(2) + ' €';
+                elSolde.className = solde > 0 ? "text-rose-600 font-black text-xl" : "text-emerald-600 font-black text-xl";
+            }
+
+            const modal = document.getElementById('retroBilanModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeRetroBilanModal() {
             const modal = document.getElementById('retroBilanModal');
             if (modal) modal.classList.add('hidden');
         }
