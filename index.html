@@ -419,6 +419,7 @@
             </div>
             <div class="p-4 overflow-y-auto w-full">
                 <form id="retroForm" onsubmit="saveRetro(event)">
+                    
                     <div class="grid grid-cols-2 gap-4 mb-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Année *</label>
@@ -434,20 +435,26 @@
                             </select>
                         </div>
                     </div>
-                    <div class="grid grid-cols-3 gap-4 mb-4 border-t border-gray-100 pt-4">
+                    
+                    <div class="grid grid-cols-4 gap-4 mb-4 border-t border-gray-100 pt-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Taux Rétro %</label>
-                            <input type="number" step="0.01" id="retroTaux" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm" placeholder="Ex: 25">
+                            <label class="block text-[10px] md:text-xs font-bold text-gray-600 uppercase mb-1" title="Taux Rétrocession Cabinet">Taux Cab. %</label>
+                            <input type="number" step="0.01" id="retroTauxCab" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm" placeholder="Ex: 25">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mt Kiné (€) *</label>
+                            <label class="block text-[10px] md:text-xs font-bold text-gray-600 uppercase mb-1" title="Taux Rétrocession Domicile">Taux Dom. %</label>
+                            <input type="number" step="0.01" id="retroTauxDom" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm" placeholder="Ex: 0">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] md:text-xs font-bold text-gray-600 uppercase mb-1">Mt Kiné (€) *</label>
                             <input type="number" step="0.01" id="retroKine" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm" placeholder="0.00">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mt Remplaçant (€) *</label>
+                            <label class="block text-[10px] md:text-xs font-bold text-gray-600 uppercase mb-1">Mt Rempla. (€) *</label>
                             <input type="number" step="0.01" id="retroRemplacant" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm" placeholder="0.00">
                         </div>
                     </div>
+                    
                     <div class="grid grid-cols-2 gap-4 mb-4 border-t border-gray-100 pt-4">
                         <div>
                             <label class="block text-xs font-bold text-emerald-700 uppercase mb-1">Montant Payé (€)</label>
@@ -458,6 +465,7 @@
                             <input type="date" id="retroDatePaiement" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 shadow-sm">
                         </div>
                     </div>
+                    
                     <div class="mt-6 flex justify-end">
                         <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md transition text-sm">Enregistrer Rétro</button>
                     </div>
@@ -1660,11 +1668,52 @@
 
         function saveRetro(e) {
             e.preventDefault();
-            const gPrat = document.getElementById('globalPraticienFilter').value; let targetPraticien = gPrat !== 'ALL' ? gPrat : praticiensList[0].name;
-            const newRetro = { annee: parseInt(document.getElementById('retroAnnee').value), mois: document.getElementById('retroMois').value, praticien: targetPraticien, taux: parseFloat(document.getElementById('retroTaux').value)||0, kine: parseFloat(document.getElementById('retroKine').value)||0, remplacant: parseFloat(document.getElementById('retroRemplacant').value)||0, paye: parseFloat(document.getElementById('retroPaye').value)||0, datePaiement: document.getElementById('retroDatePaiement').value || "", regKine: null, regRemplacant: null };
-            if (currentRetroEditId) { const idx = retroList.findIndex(r => r.id === currentRetroEditId); if (idx !== -1) { newRetro.praticien = retroList[idx].praticien; newRetro.regKine = retroList[idx].regKine; newRetro.regRemplacant = retroList[idx].regRemplacant; retroList[idx] = { ...retroList[idx], ...newRetro }; } } 
-            else { newRetro.id = Date.now().toString(); retroList.push(newRetro); }
-            localStorage.setItem('retro_data', JSON.stringify(retroList)); updateYearsDatalist(); closeRetroModal(); renderRetros();
+            
+            // Récupération du praticien
+            const gPrat = document.getElementById('globalPraticienFilter').value;
+            let targetPraticien = gPrat !== 'ALL' ? gPrat : praticiensList[0].name;
+            
+            // NOUVEAU : Récupération des deux taux distincts
+            const tauxCabinet = parseFloat(document.getElementById('retroTauxCab').value) || 0;
+            const tauxDomicile = parseFloat(document.getElementById('retroTauxDom').value) || 0;
+
+            // Création du nouvel objet Rétrocession
+            const newRetro = { 
+                annee: parseInt(document.getElementById('retroAnnee').value), 
+                mois: document.getElementById('retroMois').value, 
+                praticien: targetPraticien, 
+                
+                // On remplace 'taux' par nos deux nouvelles variables
+                tauxCab: tauxCabinet, 
+                tauxDom: tauxDomicile, 
+                
+                kine: parseFloat(document.getElementById('retroKine').value) || 0, 
+                remplacant: parseFloat(document.getElementById('retroRemplacant').value) || 0, 
+                paye: parseFloat(document.getElementById('retroPaye').value) || 0, 
+                datePaiement: document.getElementById('retroDatePaiement').value || "", 
+                regKine: null, 
+                regRemplacant: null 
+            };
+
+            // Mise à jour ou Création
+            if (currentRetroEditId) { 
+                const idx = retroList.findIndex(r => r.id === currentRetroEditId); 
+                if (idx !== -1) { 
+                    newRetro.praticien = retroList[idx].praticien; 
+                    newRetro.regKine = retroList[idx].regKine; 
+                    newRetro.regRemplacant = retroList[idx].regRemplacant; 
+                    retroList[idx] = { ...retroList[idx], ...newRetro }; 
+                } 
+            } else { 
+                newRetro.id = Date.now().toString(); 
+                retroList.push(newRetro); 
+            }
+
+            // Sauvegarde (en local) et rafraîchissement
+            localStorage.setItem('retro_data', JSON.stringify(retroList)); 
+            updateYearsDatalist(); 
+            closeRetroModal(); 
+            renderRetros();
         }
 
         function editRetro(id) {
@@ -1678,26 +1727,73 @@
         function deleteRetro(id) { if(confirm("Supprimer cette rétrocession ?")) { retroList = retroList.filter(r => r.id !== id); localStorage.setItem('retro_data', JSON.stringify(retroList)); updateYearsDatalist(); renderRetros(); } }
 
         function renderRetros() {
-            const tbody = document.getElementById('retrosTableBody'); tbody.innerHTML = '';
+            const tbody = document.getElementById('retrosTableBody'); 
+            tbody.innerHTML = '';
             const gPrat = document.getElementById('globalPraticienFilter').value, filterYear = document.getElementById('yearFilter').value;
-            let filtered = retroList.filter(r => { if (gPrat !== 'ALL' && r.praticien !== gPrat) return false; if (filterYear !== 'ALL' && r.annee.toString() !== filterYear) return false; return true; });
-            filtered.sort((a,b) => { if(b.annee !== a.annee) return b.annee - a.annee; return parseInt(b.mois) - parseInt(a.mois); });
+            
+            let filtered = retroList.filter(r => { 
+                if (gPrat !== 'ALL' && r.praticien !== gPrat) return false; 
+                if (filterYear !== 'ALL' && r.annee.toString() !== filterYear) return false; 
+                return true; 
+            });
+            
+            filtered.sort((a,b) => { 
+                if(b.annee !== a.annee) return b.annee - a.annee; 
+                return parseInt(b.mois) - parseInt(a.mois); 
+            });
+            
             document.getElementById('retroEmptyState').classList.toggle('hidden', filtered.length > 0);
 
             filtered.forEach(r => {
-                const isRegul = (r.regKine !== null || r.regRemplacant !== null), realKine = isRegul ? r.regKine : r.kine, realRempl = isRegul ? r.regRemplacant : r.remplacant;
-                const totalFSE = realKine + realRempl, solde = totalFSE - r.paye, moisNom = nomsMois[parseInt(r.mois)-1] || r.mois, dPaie = r.datePaiement ? new Date(r.datePaiement).toLocaleDateString('fr-FR') : '-';
+                const isRegul = (r.regKine !== null || r.regRemplacant !== null);
+                const realKine = isRegul ? r.regKine : r.kine;
+                const realRempl = isRegul ? r.regRemplacant : r.remplacant;
+                const totalFSE = realKine + realRempl;
+                const solde = totalFSE - r.paye;
+                const moisNom = nomsMois[parseInt(r.mois)-1] || r.mois;
+                const dPaie = r.datePaiement ? new Date(r.datePaiement).toLocaleDateString('fr-FR') : '-';
                 
-                const tr = document.createElement('tr'); tr.className = `border-b border-gray-100 bg-white hover:bg-purple-50/30 transition`;
-                let kineHtml = `${r.kine.toFixed(2)}€`, remplHtml = `${r.remplacant.toFixed(2)}€`, totalHtml = `${(r.kine+r.remplacant).toFixed(2)}€`;
-                if (isRegul) { kineHtml = `<s class="text-gray-400 text-[10px]">${r.kine.toFixed(2)}</s><br><span class="text-orange-700 font-bold">${realKine.toFixed(2)}€</span>`; remplHtml = `<s class="text-gray-400 text-[10px]">${r.remplacant.toFixed(2)}</s><br><span class="text-orange-700 font-bold">${realRempl.toFixed(2)}€</span>`; totalHtml = `<s class="text-gray-400 text-[10px]">${(r.kine+r.remplacant).toFixed(2)}</s><br><span class="text-orange-700 font-black">${totalFSE.toFixed(2)}€</span>`; }
+                const tr = document.createElement('tr'); 
+                tr.className = `border-b border-gray-100 bg-white hover:bg-purple-50/30 transition`;
+                
+                let kineHtml = `${r.kine.toFixed(2)}€`;
+                let remplHtml = `${r.remplacant.toFixed(2)}€`;
+                let totalHtml = `${(r.kine+r.remplacant).toFixed(2)}€`;
+                
+                if (isRegul) { 
+                    kineHtml = `<s class="text-gray-400 text-[10px]">${r.kine.toFixed(2)}</s><br><span class="text-orange-700 font-bold">${realKine.toFixed(2)}€</span>`; 
+                    remplHtml = `<s class="text-gray-400 text-[10px]">${r.remplacant.toFixed(2)}</s><br><span class="text-orange-700 font-bold">${realRempl.toFixed(2)}€</span>`;
+                    totalHtml = `<s class="text-gray-400 text-[10px]">${(r.kine+r.remplacant).toFixed(2)}</s><br><span class="text-orange-700 font-black">${totalFSE.toFixed(2)}€</span>`; 
+                }
+
+                // NOUVEAU : Affichage formaté des deux taux (Cabinet et Domicile) avec rétrocompatibilité
+                const valCab = r.tauxCab !== undefined ? r.tauxCab : (r.taux || 0);
+                const valDom = r.tauxDom !== undefined ? r.tauxDom : 0;
+                
+                const tauxHtml = `
+                    <div class="text-[10px] leading-tight flex flex-col gap-0.5 justify-center">
+                        <div><span class="text-gray-400 uppercase tracking-wider">Cab:</span> <span class="font-bold text-gray-700">${valCab}%</span></div>
+                        <div><span class="text-gray-400 uppercase tracking-wider">Dom:</span> <span class="font-bold text-gray-700">${valDom}%</span></div>
+                    </div>
+                `;
 
                 tr.innerHTML = `
-                    <td class="p-2 font-bold text-gray-700">${moisNom} ${r.annee}</td><td class="p-2">${getPraticienBadge(r.praticien)}</td><td class="p-2 text-center text-gray-600">${r.taux ? r.taux+'%' : '-'}</td>
-                    <td class="p-2 text-right">${kineHtml}</td><td class="p-2 text-right">${remplHtml}</td><td class="p-2 text-right bg-purple-50/50">${totalHtml}</td>
-                    <td class="p-2 text-right font-bold text-emerald-600">${r.paye.toFixed(2)}€</td><td class="p-2 text-center text-gray-500">${dPaie}</td>
+                    <td class="p-2 font-bold text-gray-700">${moisNom} ${r.annee}</td>
+                    <td class="p-2">${getPraticienBadge(r.praticien)}</td>
+                    <td class="p-2 text-left sm:text-center">${tauxHtml}</td>
+                    <td class="p-2 text-right">${kineHtml}</td>
+                    <td class="p-2 text-right">${remplHtml}</td>
+                    <td class="p-2 text-right bg-purple-50/50">${totalHtml}</td>
+                    <td class="p-2 text-right font-bold text-emerald-600">${r.paye.toFixed(2)}€</td>
+                    <td class="p-2 text-center text-gray-500">${dPaie}</td>
                     <td class="p-2 text-right font-black ${solde !== 0 ? 'text-rose-600' : 'text-emerald-500'}">${solde.toFixed(2)}€</td>
-                    <td class="p-2 text-center"><div class="flex justify-center items-center gap-1"><button onclick="openRegulModal('${r.id}')" title="Régulariser (Fin d'année)" class="text-orange-500 hover:text-white hover:bg-orange-500 border border-orange-500 text-[10px] font-bold px-1.5 py-0.5 rounded transition">Régul.</button><button onclick="editRetro('${r.id}')" class="text-blue-500 hover:text-blue-700 text-xs px-1">✎</button><button onclick="deleteRetro('${r.id}')" class="text-rose-500 hover:text-rose-700 text-xs px-1">🗑</button></div></td>
+                    <td class="p-2 text-center">
+                        <div class="flex justify-center items-center gap-1">
+                            <button onclick="openRegulModal('${r.id}')" title="Régulariser (Fin d'année)" class="text-orange-500 hover:text-white hover:bg-orange-500 border border-orange-500 text-[10px] font-bold px-1.5 py-0.5 rounded transition">Régul.</button>
+                            <button onclick="editRetro('${r.id}')" class="text-blue-500 hover:text-blue-700 text-xs px-1">✎</button>
+                            <button onclick="deleteRetro('${r.id}')" class="text-rose-500 hover:text-rose-700 text-xs px-1">🗑</button>
+                        </div>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
