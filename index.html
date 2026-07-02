@@ -1452,7 +1452,7 @@
             let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
 
             // ==========================================
-            // NOUVEAU : VÉRIFICATION INTELLIGENTE (RO/RC)
+            // VÉRIFICATION INTELLIGENTE (RO/RC & ALD)
             // ==========================================
             if (!currentNoemieEditId) { 
                 let duplicateReleve = false;
@@ -1478,17 +1478,19 @@
                             const isRcMatch = mVal > 0 && Math.abs(mVal - linkedFse.partRC) <= 0.01;
                             const isGlobalMatch = mVal > 0 && Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
 
-                            if (isRoMatch && isRcMatch) {
-                                // Cas rare : parts RO et RC de montants identiques. Doublon uniquement si TOUT est déjà payé.
+                            // CORRECTION ALD : Ordre de vérification strict
+                            if (linkedFse.isLocked) {
+                                isDuplicate = true; // FSE totalement soldée et verrouillée
+                            } else if (isGlobalMatch && linkedFse.partRO > 0 && linkedFse.partRC > 0) {
+                                // Vrai paiement global : il y a bien 2 parts > 0 (Ignore les ALD)
+                                if (linkedFse.checkRO || linkedFse.checkRC) isDuplicate = true;
+                            } else if (isRoMatch && isRcMatch) {
+                                // Cas rare : parts RO et RC de montants identiques
                                 if (linkedFse.checkRO && linkedFse.checkRC) isDuplicate = true;
-                            } else if (isGlobalMatch && (linkedFse.checkRO || linkedFse.checkRC)) {
-                                isDuplicate = true; // Tentative de payer le total, mais une part est déjà validée
                             } else if (isRoMatch && linkedFse.checkRO) {
                                 isDuplicate = true; // Tentative de payer RO, mais c'est déjà fait
                             } else if (isRcMatch && linkedFse.checkRC) {
                                 isDuplicate = true; // Tentative de payer RC, mais c'est déjà fait
-                            } else if (linkedFse.isLocked) {
-                                isDuplicate = true; // FSE totalement soldée et verrouillée
                             }
 
                             if (isDuplicate) duplicateFSEs.push(fVal);
@@ -1546,8 +1548,6 @@
 
             document.body.style.cursor = 'wait';
             
-            // ÉLIMINATION DES DOUBLONS : Si une FSE a été modifiée sur plusieurs lignes (ex: RO puis RC),
-            // on ne garde qu'une seule instance dans le tableau à envoyer à Supabase.
             const uniqueFsesToUpdate = Array.from(new Set(fsesToUpdate));
             
             const [resNoemie, resFse] = await Promise.all([
