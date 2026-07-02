@@ -1166,18 +1166,21 @@
         async function editFSE(id) {
             const item = fseList.find(f => f.id === id);
             if (item && !item.isLocked && !item.isDefacture) {
-                // On remplit le formulaire avec les infos existantes
                 document.getElementById('fseDate').value = item.date;
                 document.getElementById('fseLot').value = item.lot;
-                document.getElementById('fseCaisse').value = item.caisse;
-                document.getElementById('fseDegradeLot').checked = item.isDegrade;
+                document.getElementById('fseCaisse').value = item.caisse || '';
                 
-                // On prépare la ligne de facture
+                const chkDegrade = document.getElementById('fseDegradeLot');
+                if (chkDegrade) chkDegrade.checked = item.isDegrade || false;
+                
                 const list = document.getElementById('fseFacturesList');
-                list.innerHTML = ''; // On vide les lignes vides
-                addFseFactureRow(item.numFSE, item.patient, item.partRO, item.partRC);
+                list.innerHTML = ''; 
+                addFseRow(item.numFSE, item.patient, item.partRO, item.partRC);
                 
-                currentEditId = id; // On mémorise qu'on est en train d'éditer
+                currentEditId = id; 
+                const title = document.getElementById('fseFormTitle');
+                if (title) title.innerText = "Modifier la Facture";
+                
                 document.getElementById('fseModal').classList.remove('hidden');
             }
         }
