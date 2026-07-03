@@ -816,6 +816,24 @@
         </div>
     </div>
 
+    <!-- MINI MODALE N° DE RELEVÉ -->
+    <div id="miniReleveModal" class="hidden fixed inset-0 z-[70] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-xs flex flex-col overflow-hidden">
+            <div class="bg-teal-600 p-3 text-white flex justify-between items-center">
+                <h3 class="font-bold text-sm">N° de Relevé</h3>
+                <button onclick="closeMiniReleveModal()" class="hover:text-teal-200 font-bold text-lg leading-none outline-none">&times;</button>
+            </div>
+            <div class="p-4">
+                <label class="block text-xs font-bold text-gray-700 mb-2">Entrez le numéro de relevé bancaire :</label>
+                <input type="text" id="miniReleveInput" onkeydown="if(event.key==='Enter') saveMiniReleve()" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm" placeholder="Ex: 123456">
+                <div class="mt-4 flex justify-end gap-2">
+                    <button onclick="closeMiniReleveModal()" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition">Ignorer</button>
+                    <button onclick="saveMiniReleve()" class="px-3 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded shadow-sm transition">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <datalist id="patientsList"></datalist>
     <datalist id="caissesList"></datalist>
     <datalist id="mutuellesList"></datalist>
@@ -1588,9 +1606,77 @@
             document.getElementById('noemieModal').classList.remove('hidden');
         }
 
+        let currentNoemieReleveId = null;
+
         async function updateNoemieInline(id, field, val) {
             const item = noemieList.find(n => n.id === id);
-            if(item) { item[field] = val; await dbUpdateNoemie(item); renderNoemieTable(); }
+            if(item) { 
+                item[field] = val; 
+                let fsesToUpdate = [];
+
+                // Si on a modifié la date d'encaissement, on synchronise les FSE concernées
+                if (field === 'encaisseLe' && val) {
+                    if (item.factures && item.factures.length > 0) {
+                        item.factures.forEach(fac => {
+                            let fseLinked = fseList.find(f => f.numFSE === fac.fse && !f.isDefacture);
+                            if (fseLinked) {
+                                let changed = false;
+                                let mVal = parseFloat(fac.montant) || 0;
+                                const isRoMatch = mVal > 0 && Math.abs(mVal - fseLinked.partRO) <= 0.01;
+                                const isRcMatch = mVal > 0 && Math.abs(mVal - fseLinked.partRC) <= 0.01;
+                                const isGlobalMatch = mVal > 0 && Math.abs(mVal - (fseLinked.partRO + fseLinked.partRC)) <= 0.01;
+
+                                if (isGlobalMatch && fseLinked.partRO > 0 && fseLinked.partRC > 0) {
+                                    if (fseLinked.checkRO) { fseLinked.dateVirementRO = val; changed = true; }
+                                    if (fseLinked.checkRC) { fseLinked.dateVirementRC = val; changed = true; }
+                                } else if (isRoMatch && isRcMatch) {
+                                    if (fseLinked.checkRO) { fseLinked.dateVirementRO = val; changed = true; }
+                                    if (fseLinked.checkRC) { fseLinked.dateVirementRC = val; changed = true; }
+                                } else if (isRoMatch) {
+                                    if (fseLinked.checkRO) { fseLinked.dateVirementRO = val; changed = true; }
+                                } else if (isRcMatch) {
+                                    if (fseLinked.checkRC) { fseLinked.dateVirementRC = val; changed = true; }
+                                }
+                                if (changed) fsesToUpdate.push(fseLinked);
+                            }
+                        });
+                    }
+                }
+
+                document.body.style.cursor = 'wait';
+                const uniqueFsesToUpdate = Array.from(new Set(fsesToUpdate));
+                
+                await Promise.all([
+                    dbUpdateNoemie(item),
+                    uniqueFsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(uniqueFsesToUpdate.map(mapFseToDb)) : Promise.resolve()
+                ]);
+                document.body.style.cursor = 'default';
+                
+                // Rafraîchir les tableaux
+                renderNoemieTable();
+                if (fsesToUpdate.length > 0) render();
+
+                // Si on vient de valider la date, on ouvre la mini-modale pour le relevé
+                if (field === 'encaisseLe' && val) {
+                    currentNoemieReleveId = id;
+                    document.getElementById('miniReleveInput').value = item.releve || '';
+                    document.getElementById('miniReleveModal').classList.remove('hidden');
+                    setTimeout(() => document.getElementById('miniReleveInput').focus(), 100);
+                }
+            }
+        }
+
+        function closeMiniReleveModal() {
+            document.getElementById('miniReleveModal').classList.add('hidden');
+            currentNoemieReleveId = null;
+        }
+
+        async function saveMiniReleve() {
+            if (!currentNoemieReleveId) return;
+            const val = document.getElementById('miniReleveInput').value.trim();
+            // On sauvegarde le relevé en appelant la même fonction inline
+            await updateNoemieInline(currentNoemieReleveId, 'releve', val);
+            closeMiniReleveModal();
         }
 
         async function deleteNoemie(id) {
@@ -1664,13 +1750,18 @@
                 const nbActes = item.factures ? item.factures.length : 0;
                 let totalRetour = item.totalMontant || (item.factures ? item.factures.reduce((a, f) => a + (parseFloat(f.montant) || 0), 0) : 0);
 
+                // NOUVEAU : onblur et onkeydown ajoutés sur les inputs inline
                 trMain.innerHTML = `
                     <td class="p-2"><div class="flex flex-col gap-1 items-start">${badgeHtml}<span class="${tColorNorm}">${item.dateNoemie ? new Date(item.dateNoemie).toLocaleDateString('fr-FR') : '-'}</span></div></td>
                     <td class="p-2 truncate max-w-[90px]">${getPraticienBadge(item.praticien)}</td><td class="p-2 ${tColorNorm}">${item.caisse || '-'}</td>
                     <td class="p-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">${nbActes} FSE</span></td>
                     <td class="p-2 text-right text-sm ${tColorEm}">${totalRetour ? totalRetour.toFixed(2) : '0.00'} €</td>
-                    <td class="p-2 text-center bg-indigo-50/30"><input type="date" value="${item.encaisseLe || ''}" onchange="updateNoemieInline('${item.id}', 'encaisseLe', this.value)" class="border border-transparent hover:border-gray-300 rounded p-0.5 text-[9px] w-[95px] text-center bg-transparent focus:bg-white focus:border-indigo-400 transition-colors cursor-pointer"></td>
-                    <td class="p-2"><input type="text" value="${item.releve || ''}" onchange="updateNoemieInline('${item.id}', 'releve', this.value)" class="border border-transparent hover:border-gray-300 rounded p-1 text-[10px] w-full bg-transparent focus:bg-white focus:border-teal-400 transition-colors"></td>
+                    <td class="p-2 text-center bg-indigo-50/30">
+                        <input type="date" value="${item.encaisseLe || ''}" onblur="if(this.value !== '${item.encaisseLe || ''}') updateNoemieInline('${item.id}', 'encaisseLe', this.value)" onkeydown="if(event.key==='Enter') this.blur()" class="border border-transparent hover:border-gray-300 rounded p-0.5 text-[9px] w-[95px] text-center bg-transparent focus:bg-white focus:border-indigo-400 transition-colors cursor-pointer">
+                    </td>
+                    <td class="p-2">
+                        <input type="text" value="${item.releve || ''}" onblur="if(this.value !== '${item.releve || ''}') updateNoemieInline('${item.id}', 'releve', this.value)" onkeydown="if(event.key==='Enter') this.blur()" class="border border-transparent hover:border-gray-300 rounded p-1 text-[10px] w-full bg-transparent focus:bg-white focus:border-teal-400 transition-colors">
+                    </td>
                     <td class="p-2 truncate max-w-[150px] ${tColorItal}">${item.info || '-'}</td>
                     <td class="p-2 text-center"><div class="flex justify-center items-center gap-2"><button onclick="editNoemie('${item.id}')" title="Modifier" class="text-blue-500 hover:text-blue-700 text-xs bg-blue-50 p-1 rounded">✎</button><button onclick="deleteNoemie('${item.id}')" title="Supprimer" class="text-rose-500 hover:text-rose-700 text-xs bg-rose-50 p-1 rounded">🗑</button></div></td>
                 `;
