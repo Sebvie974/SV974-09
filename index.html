@@ -1550,7 +1550,7 @@
                 let dueRC = f.checkRC ? 0 : f.partRC;
                 if ((dueRO + dueRC) <= 0) return false;
 
-                // Filtrage intelligent Mutuelle/Caisse (si la case "Tout afficher" n'est pas cochée)
+                // Filtrage intelligent Mutuelle/Caisse
                 if (!showAll && targetCaisseMut) {
                     let c = (f.caisse || '').toLowerCase();
                     let m = (f.mutuelle || '').toLowerCase();
@@ -1559,7 +1559,7 @@
                 return true;
             });
 
-            // Tri de la plus ancienne à la plus récente
+            // Tri chronologique
             pendingFses.sort((a, b) => new Date(a.date) - new Date(b.date));
 
             if (pendingFses.length === 0) {
@@ -1569,33 +1569,57 @@
             pendingFses.forEach(f => {
                 let dueRO = f.checkRO ? 0 : f.partRO;
                 let dueRC = f.checkRC ? 0 : f.partRC;
-                let totalDue = dueRO + dueRC;
 
                 let div = document.createElement('div');
-                div.className = "flex items-center justify-between p-2.5 hover:bg-amber-50 cursor-pointer transition-colors";
-                div.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <input type="checkbox" class="releve-fse-checkbox w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500" value="${f.numFSE}" data-amount="${totalDue}">
+                div.className = "flex flex-col p-2.5 border-b border-gray-100 hover:bg-amber-50/30 transition-colors";
+                
+                // En-tête du patient et de la facture
+                let headerHtml = `
+                    <div class="flex justify-between items-start mb-2 px-1">
                         <div>
                             <div class="font-bold text-gray-800 text-[11px] uppercase">${f.patient} <span class="text-indigo-600 font-mono ml-1 text-[10px]">(${f.numFSE || '-'})</span></div>
                             <div class="text-[10px] text-gray-500 mt-0.5">${new Date(f.date).toLocaleDateString('fr-FR')} • <span class="text-amber-700">${f.caisse || '-'} / ${f.mutuelle || '-'}</span></div>
                         </div>
                     </div>
-                    <div class="font-black font-mono text-gray-700">${totalDue.toFixed(2)} €</div>
+                    <div class="flex flex-col gap-1.5 pl-2 border-l-2 border-amber-200 ml-1">
                 `;
                 
-                // Clic sur toute la ligne pour cocher
-                div.addEventListener('click', (e) => {
-                    if (e.target.tagName !== 'INPUT') {
-                        let chk = div.querySelector('input');
-                        chk.checked = !chk.checked;
-                        updateReleveTotals();
-                    } else {
-                        updateReleveTotals();
-                    }
-                });
+                let partsHtml = '';
+
+                // Ligne indépendante pour la part RO
+                if (dueRO > 0) {
+                    partsHtml += `
+                        <label class="flex items-center justify-between cursor-pointer p-1.5 rounded hover:bg-white border border-transparent hover:border-gray-200 transition-all shadow-sm">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" class="releve-fse-checkbox w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500" value="${f.numFSE}" data-amount="${dueRO}" data-type="RO">
+                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Part RO</span>
+                            </div>
+                            <span class="font-black font-mono text-emerald-700">${dueRO.toFixed(2)} €</span>
+                        </label>
+                    `;
+                }
+                
+                // Ligne indépendante pour la part RC
+                if (dueRC > 0) {
+                    partsHtml += `
+                        <label class="flex items-center justify-between cursor-pointer p-1.5 rounded hover:bg-white border border-transparent hover:border-gray-200 transition-all shadow-sm">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" class="releve-fse-checkbox w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" value="${f.numFSE}" data-amount="${dueRC}" data-type="RC">
+                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Part RC</span>
+                            </div>
+                            <span class="font-black font-mono text-indigo-700">${dueRC.toFixed(2)} €</span>
+                        </label>
+                    `;
+                }
+
+                div.innerHTML = headerHtml + partsHtml + `</div>`;
+                
+                // L'événement se déclenche quand on coche/décoche
+                div.addEventListener('change', () => { updateReleveTotals(); });
+                
                 listContainer.appendChild(div);
             });
+            
             updateReleveTotals();
         }
 
@@ -1639,18 +1663,19 @@
             const isReleveMode = document.getElementById('cat_releve').checked;
 
             if (isReleveMode) {
-                // Mode Relevé : on prend les cases cochées
+                // Mode Relevé : on prend les cases cochées avec distinction RO / RC
                 document.querySelectorAll('.releve-fse-checkbox:checked').forEach(chk => {
                     let fVal = chk.value;
                     let mVal = parseFloat(chk.dataset.amount);
-                    if (fVal && mVal > 0) extractedRows.push({ fse: fVal, montant: mVal });
+                    let tVal = chk.dataset.type; // "RO" ou "RC"
+                    if (fVal && mVal > 0) extractedRows.push({ fse: fVal, montant: mVal, type: tVal });
                 });
             } else {
                 // Mode Normal : on lit les inputs classiques
                 document.querySelectorAll('#noemieFacturesList .facture-row').forEach(row => {
                     let fVal = row.querySelector('.fse-input').value.trim().toUpperCase();
                     let mVal = parseFloat((row.querySelector('.montant-input').value || '0').replace(',', '.')) || 0;
-                    if (fVal || mVal > 0) extractedRows.push({ fse: fVal, montant: mVal });
+                    if (fVal || mVal > 0) extractedRows.push({ fse: fVal, montant: mVal, type: null });
                 });
             }
 
@@ -1669,19 +1694,32 @@
                         const linkedFse = fseList.find(f => f.numFSE === row.fse && !f.isDefacture);
                         if (linkedFse) {
                             let isDuplicate = false;
-                            const isRoMatch = row.montant > 0 && Math.abs(row.montant - linkedFse.partRO) <= 0.01;
-                            const isRcMatch = row.montant > 0 && Math.abs(row.montant - linkedFse.partRC) <= 0.01;
-                            const isGlobalMatch = row.montant > 0 && Math.abs(row.montant - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
+                            
+                            if (linkedFse.isLocked) {
+                                isDuplicate = true;
+                            } else if (isReleveMode && row.type) {
+                                // En mode relevé, on vérifie précisément la part sélectionnée
+                                if (row.type === 'RO' && linkedFse.checkRO) isDuplicate = true;
+                                if (row.type === 'RC' && linkedFse.checkRC) isDuplicate = true;
+                            } else {
+                                // Mode normal (déduction par montant)
+                                const isRoMatch = row.montant > 0 && Math.abs(row.montant - linkedFse.partRO) <= 0.01;
+                                const isRcMatch = row.montant > 0 && Math.abs(row.montant - linkedFse.partRC) <= 0.01;
+                                const isGlobalMatch = row.montant > 0 && Math.abs(row.montant - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
 
-                            if (linkedFse.isLocked) isDuplicate = true;
-                            else if (isGlobalMatch && linkedFse.partRO > 0 && linkedFse.partRC > 0) {
-                                if (linkedFse.checkRO || linkedFse.checkRC) isDuplicate = true;
-                            } 
-                            else if (isRoMatch && isRcMatch) { if (linkedFse.checkRO && linkedFse.checkRC) isDuplicate = true; } 
-                            else if (isRoMatch && linkedFse.checkRO) isDuplicate = true;
-                            else if (isRcMatch && linkedFse.checkRC) isDuplicate = true;
+                                if (isGlobalMatch && linkedFse.partRO > 0 && linkedFse.partRC > 0) {
+                                    if (linkedFse.checkRO || linkedFse.checkRC) isDuplicate = true;
+                                } else if (isRoMatch && isRcMatch) { 
+                                    if (linkedFse.checkRO && linkedFse.checkRC) isDuplicate = true; 
+                                } else if (isRoMatch && linkedFse.checkRO) {
+                                    isDuplicate = true;
+                                } else if (isRcMatch && linkedFse.checkRC) {
+                                    isDuplicate = true;
+                                }
+                            }
 
-                            if (isDuplicate) duplicateFSEs.push(row.fse);
+                            // Si on trouve un doublon, on affiche explicitement s'il s'agit du RO ou du RC
+                            if (isDuplicate) duplicateFSEs.push(row.fse + (row.type ? ` (${row.type})` : ''));
                         }
                     }
                 });
@@ -1709,10 +1747,10 @@
                     const linkedFse = fseList.find(f => f.numFSE === row.fse && !f.isDefacture);
                     if (linkedFse) {
                         
-                        if (isReleveMode) {
-                            // En Mode Relevé, cocher la case valide tout ce qui restait à payer
-                            if (!linkedFse.checkRO && linkedFse.partRO > 0) { linkedFse.checkRO = true; if(dEncaisse) linkedFse.dateVirementRO = dEncaisse; }
-                            if (!linkedFse.checkRC && linkedFse.partRC > 0) { linkedFse.checkRC = true; if(dEncaisse) linkedFse.dateVirementRC = dEncaisse; }
+                        if (isReleveMode && row.type) {
+                            // Validation précise de la part cochée
+                            if (row.type === 'RO') { linkedFse.checkRO = true; if(dEncaisse) linkedFse.dateVirementRO = dEncaisse; }
+                            if (row.type === 'RC') { linkedFse.checkRC = true; if(dEncaisse) linkedFse.dateVirementRC = dEncaisse; }
                         } else {
                             // En Mode Normal, validation stricte par montant (RO vs RC)
                             if (row.montant > 0 && Math.abs(row.montant - linkedFse.partRO) <= 0.01) { linkedFse.checkRO = true; if(dEncaisse) linkedFse.dateVirementRO = dEncaisse; }
