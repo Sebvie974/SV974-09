@@ -379,11 +379,30 @@
                     
                     <!-- LIGNE DATE / CAISSE / ENCAISSE / RELEVÉ -->
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-4 items-end mb-4">
-                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Date *</label><input type="date" id="n_date" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
-                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Caisse / Mut</label><input type="text" id="n_caisse" list="caissesList" oninput="if(document.getElementById('cat_releve').checked) renderReleveFseList()" placeholder="CPAM, MGEN..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
-                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Encaissé le</label><input type="date" tabindex="-1" id="n_encaisse" class="w-full border border-indigo-300 rounded p-2 text-sm focus:ring-indigo-500 shadow-sm bg-indigo-50/30"></div>
-                        <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">N° Relevé</label><input type="text" tabindex="-1" id="n_releve" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
-                        <div class="md:col-span-12"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Informations / Commentaire</label><input type="text" tabindex="-1" id="n_info" placeholder="Commentaire..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm"></div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Date *</label>
+                            <!-- NOUVEAU : onchange ajouté pour copier la date vers Encaissé le -->
+                            <input type="date" id="n_date" onchange="if(this.value) document.getElementById('n_encaisse').value = this.value;" required class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm">
+                        </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Caisse / Mut</label>
+                            <input type="text" id="n_caisse" list="caissesList" oninput="if(document.getElementById('cat_releve').checked) renderReleveFseList()" placeholder="CPAM, MGEN..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm">
+                        </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Encaissé le</label>
+                            <!-- NOUVEAU : tabindex="-1" supprimé -->
+                            <input type="date" id="n_encaisse" class="w-full border border-indigo-300 rounded p-2 text-sm focus:ring-indigo-500 shadow-sm bg-indigo-50/30">
+                        </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">N° Relevé</label>
+                            <!-- NOUVEAU : tabindex="-1" supprimé -->
+                            <input type="text" id="n_releve" class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm">
+                        </div>
+                        <div class="md:col-span-12">
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Informations / Commentaire</label>
+                            <!-- NOUVEAU : tabindex="-1" supprimé -->
+                            <input type="text" id="n_info" placeholder="Commentaire..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-teal-500 shadow-sm">
+                        </div>
                     </div>
                     
                     <!-- WRAPPER DES DEUX MODES DE SAISIE -->
@@ -1541,13 +1560,15 @@
             const gPrat = document.getElementById('globalPraticienFilter').value;
             let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
 
-            // Filtrage des FSE non payées
+            // Filtrage des FSE non rapprochées en banque
             let pendingFses = fseList.filter(f => {
                 if (f.isDefacture || f.isLocked) return false;
                 if (f.praticien !== targetPraticien) return false;
                 
-                let dueRO = f.checkRO ? 0 : f.partRO;
-                let dueRC = f.checkRC ? 0 : f.partRC;
+                // NOUVELLE LOGIQUE : On vérifie si la part n'a PAS de date de virement
+                let dueRO = (!f.dateVirementRO && f.partRO > 0) ? f.partRO : 0;
+                let dueRC = (!f.dateVirementRC && f.partRC > 0) ? f.partRC : 0;
+                
                 if ((dueRO + dueRC) <= 0) return false;
 
                 // Filtrage intelligent Mutuelle/Caisse
@@ -1563,12 +1584,13 @@
             pendingFses.sort((a, b) => new Date(a.date) - new Date(b.date));
 
             if (pendingFses.length === 0) {
-                listContainer.innerHTML = '<div class="p-4 text-center text-gray-500 text-xs italic">Aucune facture en attente ne correspond aux critères.</div>';
+                listContainer.innerHTML = '<div class="p-4 text-center text-gray-500 text-xs italic">Aucune facture en attente de rapprochement ne correspond aux critères.</div>';
             }
 
             pendingFses.forEach(f => {
-                let dueRO = f.checkRO ? 0 : f.partRO;
-                let dueRC = f.checkRC ? 0 : f.partRC;
+                // On recalcule les parts dues (sans date de virement) pour l'affichage
+                let dueRO = (!f.dateVirementRO && f.partRO > 0) ? f.partRO : 0;
+                let dueRC = (!f.dateVirementRC && f.partRC > 0) ? f.partRC : 0;
 
                 let div = document.createElement('div');
                 div.className = "flex flex-col p-2.5 border-b border-gray-100 hover:bg-amber-50/30 transition-colors";
@@ -1588,11 +1610,12 @@
 
                 // Ligne indépendante pour la part RO
                 if (dueRO > 0) {
+                    let mentionNoemieRO = f.checkRO ? ' <span class="text-[9px] text-emerald-600 bg-emerald-100 px-1 rounded ml-1 font-bold">NOEMIE OK</span>' : '';
                     partsHtml += `
                         <label class="flex items-center justify-between cursor-pointer p-1.5 rounded hover:bg-white border border-transparent hover:border-gray-200 transition-all shadow-sm">
                             <div class="flex items-center gap-2">
                                 <input type="checkbox" class="releve-fse-checkbox w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500" value="${f.numFSE}" data-amount="${dueRO}" data-type="RO">
-                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Part RO</span>
+                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Part RO ${mentionNoemieRO}</span>
                             </div>
                             <span class="font-black font-mono text-emerald-700">${dueRO.toFixed(2)} €</span>
                         </label>
@@ -1601,11 +1624,12 @@
                 
                 // Ligne indépendante pour la part RC
                 if (dueRC > 0) {
+                    let mentionNoemieRC = f.checkRC ? ' <span class="text-[9px] text-indigo-500 bg-indigo-100 px-1 rounded ml-1 font-bold">NOEMIE OK</span>' : '';
                     partsHtml += `
                         <label class="flex items-center justify-between cursor-pointer p-1.5 rounded hover:bg-white border border-transparent hover:border-gray-200 transition-all shadow-sm">
                             <div class="flex items-center gap-2">
                                 <input type="checkbox" class="releve-fse-checkbox w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" value="${f.numFSE}" data-amount="${dueRC}" data-type="RC">
-                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Part RC</span>
+                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Part RC ${mentionNoemieRC}</span>
                             </div>
                             <span class="font-black font-mono text-indigo-700">${dueRC.toFixed(2)} €</span>
                         </label>
@@ -1614,9 +1638,7 @@
 
                 div.innerHTML = headerHtml + partsHtml + `</div>`;
                 
-                // L'événement se déclenche quand on coche/décoche
                 div.addEventListener('change', () => { updateReleveTotals(); });
-                
                 listContainer.appendChild(div);
             });
             
