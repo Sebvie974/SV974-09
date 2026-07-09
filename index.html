@@ -1956,9 +1956,9 @@
             filteredNoemie.forEach(item => {
                 const trMain = document.createElement('tr');
                 
-                // NOUVEAU : Logique de coloration pour les lignes rapprochées (avec encaisseLe)
+                // Coloration plus franche : bg-emerald-100 sans effet de transparence
                 const isRapproche = item.encaisseLe && item.encaisseLe.trim() !== '';
-                let bgClass = isRapproche ? "bg-emerald-50/60 hover:bg-emerald-100/50 " : (item.catJustif ? "bg-amber-50 hover:bg-amber-100/70 " : "bg-white hover:bg-teal-50/20 ");
+                let bgClass = isRapproche ? "bg-emerald-100 hover:bg-emerald-200 " : (item.catJustif ? "bg-amber-50 hover:bg-amber-100/70 " : "bg-white hover:bg-teal-50/20 ");
                 
                 trMain.className = `border-t-2 border-gray-200 transition-colors ${bgClass}`;
                 
@@ -1967,16 +1967,17 @@
                 const nbActes = item.factures ? item.factures.length : 0;
                 let totalRetour = item.totalMontant || (item.factures ? item.factures.reduce((a, f) => a + (parseFloat(f.montant) || 0), 0) : 0);
 
+                // Suppression du fond spécifique sur la cellule "encaisseLe" pour ne pas couper la couleur
                 trMain.innerHTML = `
                     <td class="p-2"><div class="flex flex-col gap-1 items-start">${badgeHtml}<span class="${tColorNorm}">${item.dateNoemie ? new Date(item.dateNoemie).toLocaleDateString('fr-FR') : '-'}</span></div></td>
                     <td class="p-2 truncate max-w-[90px]">${getPraticienBadge(item.praticien)}</td><td class="p-2 ${tColorNorm}">${item.caisse || '-'}</td>
                     <td class="p-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">${nbActes} FSE</span></td>
                     <td class="p-2 text-right text-sm ${tColorEm}">${totalRetour ? totalRetour.toFixed(2) : '0.00'} €</td>
-                    <td class="p-2 text-center ${isRapproche ? 'bg-emerald-100/40' : 'bg-indigo-50/30'}">
-                        <input type="date" value="${item.encaisseLe || ''}" onblur="if(this.value !== '${item.encaisseLe || ''}') updateNoemieInline('${item.id}', 'encaisseLe', this.value)" onkeydown="if(event.key==='Enter') this.blur()" class="border border-transparent hover:border-gray-300 rounded p-0.5 text-[9px] w-[95px] text-center bg-transparent focus:bg-white focus:border-indigo-400 transition-colors cursor-pointer">
+                    <td class="p-2 text-center ${isRapproche ? '' : 'bg-indigo-50/30'}">
+                        <input type="date" value="${item.encaisseLe || ''}" onblur="if(this.value !== '${item.encaisseLe || ''}') updateNoemieInline('${item.id}', 'encaisseLe', this.value)" onkeydown="if(event.key==='Enter') this.blur()" class="border border-transparent hover:border-gray-400 rounded p-0.5 text-[9px] w-[95px] text-center bg-transparent focus:bg-white focus:border-indigo-400 transition-colors cursor-pointer">
                     </td>
                     <td class="p-2">
-                        <input type="text" value="${item.releve || ''}" onblur="if(this.value !== '${item.releve || ''}') updateNoemieInline('${item.id}', 'releve', this.value)" onkeydown="if(event.key==='Enter') this.blur()" class="border border-transparent hover:border-gray-300 rounded p-1 text-[10px] w-full bg-transparent focus:bg-white focus:border-teal-400 transition-colors">
+                        <input type="text" value="${item.releve || ''}" onblur="if(this.value !== '${item.releve || ''}') updateNoemieInline('${item.id}', 'releve', this.value)" onkeydown="if(event.key==='Enter') this.blur()" class="border border-transparent hover:border-gray-400 rounded p-1 text-[10px] w-full bg-transparent focus:bg-white focus:border-teal-400 transition-colors">
                     </td>
                     <td class="p-2 truncate max-w-[150px] ${tColorItal}">${item.info || '-'}</td>
                     <td class="p-2 text-center"><div class="flex justify-center items-center gap-2"><button onclick="editNoemie('${item.id}')" title="Modifier" class="text-blue-500 hover:text-blue-700 text-xs bg-blue-50 p-1 rounded">✎</button><button onclick="deleteNoemie('${item.id}')" title="Supprimer" class="text-rose-500 hover:text-rose-700 text-xs bg-rose-50 p-1 rounded">🗑</button></div></td>
@@ -1987,8 +1988,8 @@
                     item.factures.forEach(f => {
                         const trSub = document.createElement('tr');
                         
-                        // Hériter de la couleur verte si la ligne principale est rapprochée
-                        const highlightClass = (sFSE && f.fse && f.fse.toLowerCase().includes(sFSE)) ? 'bg-yellow-200 shadow-inner' : (isRapproche ? "bg-emerald-50/30" : (item.catReleve ? "bg-red-50/50" : (item.catJustif ? "bg-amber-50" : "bg-gray-50")));
+                        // Teinte un peu plus claire pour la sous-ligne, mais franche (bg-emerald-50 solide)
+                        const highlightClass = (sFSE && f.fse && f.fse.toLowerCase().includes(sFSE)) ? 'bg-yellow-200 shadow-inner' : (isRapproche ? "bg-emerald-50" : (item.catReleve ? "bg-red-50/50" : (item.catJustif ? "bg-amber-50" : "bg-gray-50")));
                         
                         const linkedFse = fseList.find(i => i.numFSE === f.fse && !i.isDefacture);
 
