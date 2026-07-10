@@ -2078,29 +2078,45 @@
                         const trSub = document.createElement('tr');
                         const linkedFse = fseList.find(i => i.numFSE === f.fse && !i.isDefacture);
 
-                        // NOUVEAU : Récupération des dates de virement de la FSE
                         let dateInfoHtml = '';
                         let isFseRapproche = false;
+                        
                         if (linkedFse) {
                             let dRO = linkedFse.dateVirementRO ? new Date(linkedFse.dateVirementRO).toLocaleDateString('fr-FR') : '';
                             let dRC = linkedFse.dateVirementRC ? new Date(linkedFse.dateVirementRC).toLocaleDateString('fr-FR') : '';
                             
-                            if (dRO || dRC) isFseRapproche = true;
+                            // Détermination de la part concernée par ce retour pour n'afficher que l'essentiel
+                            let mVal = parseFloat(f.montant) || 0;
+                            let isRO = f.type === 'RO' || Math.abs(mVal - linkedFse.partRO) <= 0.01;
+                            let isRC = f.type === 'RC' || Math.abs(mVal - linkedFse.partRC) <= 0.01;
+                            let isGlobal = Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
 
-                            if (dRO && dRC && dRO === dRC) {
-                                dateInfoHtml = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200">Encaissé: ${dRO}</span>`;
+                            if (isGlobal || (isRO && isRC)) {
+                                if (dRO || dRC) isFseRapproche = true;
+                                if (dRO && dRC && dRO === dRC) {
+                                    dateInfoHtml = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200">Encaissé: ${dRO}</span>`;
+                                } else {
+                                    if (dRO) dateInfoHtml += `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200 mr-1">RO: ${dRO}</span>`;
+                                    if (dRC) dateInfoHtml += `<span class="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shadow-sm border border-indigo-200">RC: ${dRC}</span>`;
+                                }
+                            } else if (isRO) {
+                                if (dRO) {
+                                    dateInfoHtml = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200">RO: ${dRO}</span>`;
+                                    isFseRapproche = true;
+                                }
+                            } else if (isRC) {
+                                if (dRC) {
+                                    dateInfoHtml = `<span class="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shadow-sm border border-indigo-200">RC: ${dRC}</span>`;
+                                    isFseRapproche = true;
+                                }
                             } else {
-                                if (dRO) dateInfoHtml += `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200 mr-1">RO: ${dRO}</span>`;
-                                if (dRC) dateInfoHtml += `<span class="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shadow-sm border border-indigo-200">RC: ${dRC}</span>`;
+                                if (dRO || dRC) isFseRapproche = true;
                             }
                         }
 
-                        // Hériter de la couleur verte si la ligne principale est rapprochée OU si la FSE l'est
                         const highlightClass = (sFSE && f.fse && f.fse.toLowerCase().includes(sFSE)) ? 'bg-yellow-200 shadow-inner' : (isRapproche || isFseRapproche ? "bg-emerald-50" : (item.catReleve ? "bg-red-50/50" : (item.catJustif ? "bg-amber-50" : "bg-gray-50")));
 
                         trSub.className = `border-b border-gray-100 text-[11px] ${highlightClass} transition-colors`;
-                        
-                        // NOUVEAU : On insère dateInfoHtml dans la colonne "Encaissé le" (la 6ème colonne)
                         trSub.innerHTML = `
                             <td colspan="3" class="text-right pr-4 py-1.5 text-gray-500"><span class="text-gray-400 mr-2">↳</span> <span class="font-bold text-gray-700 uppercase">${linkedFse ? linkedFse.patient : 'Patient inconnu'}</span> - FSE N°</td>
                             <td class="text-center py-1.5 border-r border-l border-gray-200"><button type="button" onclick="showFseDetailsModal('${f.fse}')" class="font-bold font-mono text-gray-800 hover:underline hover:text-blue-600 transition outline-none rounded">${f.fse}</button></td>
