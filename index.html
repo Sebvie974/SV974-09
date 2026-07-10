@@ -2047,7 +2047,6 @@
             filteredNoemie.forEach(item => {
                 const trMain = document.createElement('tr');
                 
-                // Coloration plus franche : bg-emerald-100 sans effet de transparence
                 const isRapproche = item.encaisseLe && item.encaisseLe.trim() !== '';
                 let bgClass = isRapproche ? "bg-emerald-100 hover:bg-emerald-200 " : (item.catJustif ? "bg-amber-50 hover:bg-amber-100/70 " : "bg-white hover:bg-teal-50/20 ");
                 
@@ -2058,7 +2057,6 @@
                 const nbActes = item.factures ? item.factures.length : 0;
                 let totalRetour = item.totalMontant || (item.factures ? item.factures.reduce((a, f) => a + (parseFloat(f.montant) || 0), 0) : 0);
 
-                // Suppression du fond spécifique sur la cellule "encaisseLe" pour ne pas couper la couleur
                 trMain.innerHTML = `
                     <td class="p-2"><div class="flex flex-col gap-1 items-start">${badgeHtml}<span class="${tColorNorm}">${item.dateNoemie ? new Date(item.dateNoemie).toLocaleDateString('fr-FR') : '-'}</span></div></td>
                     <td class="p-2 truncate max-w-[90px]">${getPraticienBadge(item.praticien)}</td><td class="p-2 ${tColorNorm}">${item.caisse || '-'}</td>
@@ -2078,18 +2076,37 @@
                 if (item.factures && item.factures.length > 0) {
                     item.factures.forEach(f => {
                         const trSub = document.createElement('tr');
-                        
-                        // Teinte un peu plus claire pour la sous-ligne, mais franche (bg-emerald-50 solide)
-                        const highlightClass = (sFSE && f.fse && f.fse.toLowerCase().includes(sFSE)) ? 'bg-yellow-200 shadow-inner' : (isRapproche ? "bg-emerald-50" : (item.catReleve ? "bg-red-50/50" : (item.catJustif ? "bg-amber-50" : "bg-gray-50")));
-                        
                         const linkedFse = fseList.find(i => i.numFSE === f.fse && !i.isDefacture);
 
+                        // NOUVEAU : Récupération des dates de virement de la FSE
+                        let dateInfoHtml = '';
+                        let isFseRapproche = false;
+                        if (linkedFse) {
+                            let dRO = linkedFse.dateVirementRO ? new Date(linkedFse.dateVirementRO).toLocaleDateString('fr-FR') : '';
+                            let dRC = linkedFse.dateVirementRC ? new Date(linkedFse.dateVirementRC).toLocaleDateString('fr-FR') : '';
+                            
+                            if (dRO || dRC) isFseRapproche = true;
+
+                            if (dRO && dRC && dRO === dRC) {
+                                dateInfoHtml = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200">Encaissé: ${dRO}</span>`;
+                            } else {
+                                if (dRO) dateInfoHtml += `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200 mr-1">RO: ${dRO}</span>`;
+                                if (dRC) dateInfoHtml += `<span class="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shadow-sm border border-indigo-200">RC: ${dRC}</span>`;
+                            }
+                        }
+
+                        // Hériter de la couleur verte si la ligne principale est rapprochée OU si la FSE l'est
+                        const highlightClass = (sFSE && f.fse && f.fse.toLowerCase().includes(sFSE)) ? 'bg-yellow-200 shadow-inner' : (isRapproche || isFseRapproche ? "bg-emerald-50" : (item.catReleve ? "bg-red-50/50" : (item.catJustif ? "bg-amber-50" : "bg-gray-50")));
+
                         trSub.className = `border-b border-gray-100 text-[11px] ${highlightClass} transition-colors`;
+                        
+                        // NOUVEAU : On insère dateInfoHtml dans la colonne "Encaissé le" (la 6ème colonne)
                         trSub.innerHTML = `
                             <td colspan="3" class="text-right pr-4 py-1.5 text-gray-500"><span class="text-gray-400 mr-2">↳</span> <span class="font-bold text-gray-700 uppercase">${linkedFse ? linkedFse.patient : 'Patient inconnu'}</span> - FSE N°</td>
                             <td class="text-center py-1.5 border-r border-l border-gray-200"><button type="button" onclick="showFseDetailsModal('${f.fse}')" class="font-bold font-mono text-gray-800 hover:underline hover:text-blue-600 transition outline-none rounded">${f.fse}</button></td>
                             <td class="text-right py-1.5 pr-2 border-r border-gray-200"><span class="font-bold text-emerald-600">${parseFloat(f.montant).toFixed(2)}</span><span class="text-[9px] text-gray-500 font-normal"> / ${linkedFse ? (linkedFse.partRO + linkedFse.partRC).toFixed(2) : '??'}</span></td>
-                            <td colspan="4" class="py-1.5"></td>
+                            <td class="text-center py-1.5 border-r border-gray-200 font-bold">${dateInfoHtml}</td>
+                            <td colspan="3" class="py-1.5"></td>
                         `;
                         tbody.appendChild(trSub);
                     });
