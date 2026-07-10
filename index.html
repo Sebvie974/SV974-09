@@ -1741,7 +1741,6 @@
             const isReleveMode = document.getElementById('cat_releve').checked;
 
             if (isReleveMode) {
-                // Mode Relevé : on prend les cases cochées avec distinction RO / RC
                 document.querySelectorAll('.releve-fse-checkbox:checked').forEach(chk => {
                     let fVal = chk.value;
                     let mVal = parseFloat(chk.dataset.amount);
@@ -1749,7 +1748,6 @@
                     if (fVal && mVal > 0) extractedRows.push({ fse: fVal, montant: mVal, type: tVal });
                 });
             } else {
-                // Mode Normal : on lit les inputs classiques
                 document.querySelectorAll('#noemieFacturesList .facture-row').forEach(row => {
                     let fVal = row.querySelector('.fse-input').value.trim().toUpperCase();
                     let mVal = parseFloat((row.querySelector('.montant-input').value || '0').replace(',', '.')) || 0;
@@ -1776,11 +1774,9 @@
                             if (linkedFse.isLocked) {
                                 isDuplicate = true;
                             } else if (isReleveMode && row.type) {
-                                // En mode relevé, on vérifie précisément la part sélectionnée
                                 if (row.type === 'RO' && linkedFse.checkRO) isDuplicate = true;
                                 if (row.type === 'RC' && linkedFse.checkRC) isDuplicate = true;
                             } else {
-                                // Mode normal (déduction par montant)
                                 const isRoMatch = row.montant > 0 && Math.abs(row.montant - linkedFse.partRO) <= 0.01;
                                 const isRcMatch = row.montant > 0 && Math.abs(row.montant - linkedFse.partRC) <= 0.01;
                                 const isGlobalMatch = row.montant > 0 && Math.abs(row.montant - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
@@ -1796,7 +1792,6 @@
                                 }
                             }
 
-                            // Si on trouve un doublon, on affiche explicitement s'il s'agit du RO ou du RC
                             if (isDuplicate) duplicateFSEs.push(row.fse + (row.type ? ` (${row.type})` : ''));
                         }
                     }
@@ -1815,7 +1810,9 @@
             // 3. APPLICATION AUX FSE & SAUVEGARDE
             // ==========================================
             let facturesData = [], totalGeneral = 0, fsesToUpdate = [];
+            let noemiesToUpdate = []; // Tableau pour inclure les NOEMIE d'origine à mettre à jour
             const dEncaisse = document.getElementById('n_encaisse').value;
+            const valReleve = document.getElementById('n_releve').value.trim();
             
             extractedRows.forEach(row => {
                 facturesData.push({ fse: row.fse || '-', montant: row.montant }); 
@@ -1826,11 +1823,22 @@
                     if (linkedFse) {
                         
                         if (isReleveMode && row.type) {
-                            // Validation précise de la part cochée
                             if (row.type === 'RO') { linkedFse.checkRO = true; if(dEncaisse) linkedFse.dateVirementRO = dEncaisse; }
                             if (row.type === 'RC') { linkedFse.checkRC = true; if(dEncaisse) linkedFse.dateVirementRC = dEncaisse; }
+                            
+                            // NOUVEAU : Auto-complétion du retour NOEMIE/Justif parent
+                            noemieList.forEach(nItem => {
+                                if ((nItem.catNoemie || nItem.catJustif) && nItem.factures && nItem.factures.some(f => f.fse === row.fse)) {
+                                    let nChanged = false;
+                                    if (dEncaisse && nItem.encaisseLe !== dEncaisse) { nItem.encaisseLe = dEncaisse; nChanged = true; }
+                                    if (valReleve && nItem.releve !== valReleve) { nItem.releve = valReleve; nChanged = true; }
+                                    
+                                    if (nChanged && !noemiesToUpdate.includes(nItem)) {
+                                        noemiesToUpdate.push(nItem);
+                                    }
+                                }
+                            });
                         } else {
-                            // En Mode Normal, validation stricte par montant (RO vs RC)
                             if (row.montant > 0 && Math.abs(row.montant - linkedFse.partRO) <= 0.01) { linkedFse.checkRO = true; if(dEncaisse) linkedFse.dateVirementRO = dEncaisse; }
                             else if (row.montant > 0 && Math.abs(row.montant - linkedFse.partRC) <= 0.01) { linkedFse.checkRC = true; if(dEncaisse) linkedFse.dateVirementRC = dEncaisse; }
                             else if (row.montant > 0 && Math.abs(row.montant - (linkedFse.partRO + linkedFse.partRC)) <= 0.01) { linkedFse.checkRO = true; linkedFse.checkRC = true; if(dEncaisse) { linkedFse.dateVirementRO = dEncaisse; linkedFse.dateVirementRC = dEncaisse; } }
@@ -1855,12 +1863,17 @@
                 noemieList[index] = { ...noemieList[index], ...newNoemieData }; targetNoemie = noemieList[index];
             } else { targetNoemie = { ...newNoemieData, id: Date.now().toString() }; noemieList.push(targetNoemie); }
 
+            // Ajoute le nouveau relevé (ou celui modifié) à la liste des mises à jour
+            noemiesToUpdate.push(targetNoemie);
+
             document.body.style.cursor = 'wait';
             
             const uniqueFsesToUpdate = Array.from(new Set(fsesToUpdate));
+            const uniqueNoemiesToUpdate = Array.from(new Set(noemiesToUpdate));
             
+            // Upsert groupé sur la base de données
             const [resNoemie, resFse] = await Promise.all([
-                supabaseClient.from('noemie').upsert(mapNoemieToDb(targetNoemie)),
+                supabaseClient.from('noemie').upsert(uniqueNoemiesToUpdate.map(mapNoemieToDb)),
                 uniqueFsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(uniqueFsesToUpdate.map(mapFseToDb)) : Promise.resolve({ error: null })
             ]);
             
