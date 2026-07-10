@@ -316,7 +316,13 @@
                             <label class="block text-xs font-bold text-teal-800 uppercase mb-1">Caisse (RO)</label>
                             <input type="text" id="fseCaisse" list="caissesList" placeholder="Ex: CPAM 75" class="w-full border border-teal-300 rounded p-2 text-sm bg-white focus:ring-teal-500 shadow-sm">
                         </div>
-                        <div class="md:col-span-3 grid grid-cols-2 gap-2">
+                        <!-- NOUVEAU : Champ Mutuelle (Caché par défaut, visible en édition) -->
+                        <div class="md:col-span-3 hidden" id="fseEditMutuelleDiv">
+                            <label class="block text-xs font-bold text-indigo-800 uppercase mb-1">Mutuelle (RC)</label>
+                            <input type="text" id="fseMutuelle" list="mutuellesList" placeholder="Ex: MGEN" class="w-full border border-indigo-300 rounded p-2 text-sm bg-white focus:ring-indigo-500 shadow-sm">
+                        </div>
+                        <!-- WRAPPER : Bouton Générer (Caché en édition) -->
+                        <div class="md:col-span-3 grid grid-cols-2 gap-2" id="fseGenererDiv">
                             <div>
                                 <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1 text-center truncate">Générer</label>
                                 <input type="number" id="nbFseToAdd" value="1" min="1" class="w-full border border-gray-300 rounded p-2 text-sm bg-white text-center shadow-sm">
@@ -1111,6 +1117,15 @@
 
         function resetFseFormState() {
             currentEditId = null; document.getElementById('submitBtnFse').innerText = "Enregistrer le Lot"; document.getElementById('fseFormTitle').innerText = "Saisie d'un Lot de Facturation";
+            
+            // On cache la mutuelle et on affiche le bouton "Générer"
+            const mutDiv = document.getElementById('fseEditMutuelleDiv');
+            if (mutDiv) mutDiv.classList.add('hidden');
+            const genDiv = document.getElementById('fseGenererDiv');
+            if (genDiv) genDiv.classList.remove('hidden');
+            const mutInput = document.getElementById('fseMutuelle');
+            if (mutInput) mutInput.value = '';
+
             const gPrat = document.getElementById('globalPraticienFilter').value; let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
             let lastLotText = "-";
             if (fseList.length > 0 && targetPraticien) {
@@ -1143,35 +1158,25 @@
 
             const rows = document.querySelectorAll('#fseFacturesList .fse-row');
             
-            // --- NOUVEAU : VÉRIFICATION DES DOUBLONS ---
-            if (!currentEditId) { // Uniquement pour les nouvelles saisies
+            if (!currentEditId) { 
                 let duplicateFSEs = [];
                 let duplicateLot = false;
 
-                // 1. Vérifie si le lot existe déjà ce jour-là pour ce praticien
-                if (lotNum && lotNum !== '-') {
-                    duplicateLot = fseList.some(f => f.lot === lotNum && f.date === lotDate && f.praticien === targetPraticien);
-                }
+                if (lotNum && lotNum !== '-') duplicateLot = fseList.some(f => f.lot === lotNum && f.date === lotDate && f.praticien === targetPraticien);
 
-                // 2. Vérifie si les N° de factures tapés existent déjà
                 rows.forEach(row => {
                     const num = row.querySelector('.fse-num-input').value.trim().toUpperCase();
-                    if (num && num !== '-') {
-                        if (fseList.some(f => f.numFSE === num)) duplicateFSEs.push(num);
-                    }
+                    if (num && num !== '-') { if (fseList.some(f => f.numFSE === num)) duplicateFSEs.push(num); }
                 });
 
-                // 3. Affichage de l'alerte bloquante si doublon trouvé
                 if (duplicateLot || duplicateFSEs.length > 0) {
                     let msg = "⚠️ ATTENTION - DOUBLON(S) POTENTIEL(S) :\n\n";
                     if (duplicateLot) msg += `- Le Lot N° ${lotNum} a déjà été enregistré à cette date.\n`;
                     if (duplicateFSEs.length > 0) msg += `- Les factures suivantes existent déjà : ${duplicateFSEs.join(', ')}.\n`;
                     msg += "\nVoulez-vous vraiment forcer cet enregistrement ?";
-                    
-                    if (!confirm(msg)) return; // On annule tout si tu cliques sur "Annuler"
+                    if (!confirm(msg)) return; 
                 }
             }
-            // --- FIN DE LA VÉRIFICATION ---
 
             let itemsToUpsert = [];
 
@@ -1189,6 +1194,13 @@
                             item.partRO = ro; item.partRC = rc;
                             item.date = lotDate; item.lot = lotNum; item.caisse = lotCaisse;
                             item.isDegrade = isLotDegrade;
+                            
+                            // NOUVEAU : Enregistrement de la mutuelle modifiée
+                            const mutInput = document.getElementById('fseMutuelle');
+                            if (mutInput && mutInput.value.trim()) {
+                                item.mutuelle = mutInput.value.trim();
+                            }
+
                             item.isLocked = (item.checkRO && item.checkRC);
                             itemsToUpsert.push(item);
                         }
@@ -1197,7 +1209,7 @@
                             id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
                             date: lotDate, lot: lotNum, caisse: lotCaisse, praticien: targetPraticien,
                             numFSE: num || '-', patient: pat || 'Inconnu',
-                            mutuelle: rc === 0 ? 'ALD' : 'AMO seule', dre: '-', // ALD Automatique
+                            mutuelle: rc === 0 ? 'ALD' : 'AMO seule', dre: '-',
                             partRO: ro, partRC: rc, checkRO: (ro === 0), checkRC: (rc === 0),
                             dateVirementRO: null, dateVirementRC: null, isLocked: (ro === 0 && rc === 0),
                             isRejet: false, motifRejet: null, isDefacture: false, fseRemplacement: null, isDegrade: isLotDegrade
@@ -1209,15 +1221,12 @@
             });
 
             if (itemsToUpsert.length === 0) return;
-
             document.body.style.cursor = 'wait';
             
-            // Envoi à Supabase avec gestion des erreurs
             const { error } = await supabaseClient.from('fse').upsert(itemsToUpsert.map(mapFseToDb));
             document.body.style.cursor = 'default';
 
             if (error) {
-                console.error("Détails du refus Supabase :", error);
                 alert("❌ Supabase a refusé la sauvegarde !\nRaison : " + error.message);
                 return;
             }
@@ -1248,6 +1257,14 @@
                 
                 const chkDegrade = document.getElementById('fseDegradeLot');
                 if (chkDegrade) chkDegrade.checked = item.isDegrade || false;
+                
+                // On affiche la mutuelle et on cache le bouton "Générer"
+                const mutDiv = document.getElementById('fseEditMutuelleDiv');
+                if (mutDiv) mutDiv.classList.remove('hidden');
+                const genDiv = document.getElementById('fseGenererDiv');
+                if (genDiv) genDiv.classList.add('hidden');
+                const mutInput = document.getElementById('fseMutuelle');
+                if (mutInput) mutInput.value = item.mutuelle !== 'AMO seule' ? item.mutuelle : '';
                 
                 const list = document.getElementById('fseFacturesList');
                 list.innerHTML = ''; 
@@ -1311,12 +1328,19 @@
             }
         }
 
+        // 1. Bouton DRE cliquable même si verrouillé
         function openDreModal(fseId) {
-            const item = fseList.find(f => f.id === fseId); if(!item || item.isLocked || item.isDefacture) return;
+            const item = fseList.find(f => f.id === fseId); 
+            // On a retiré "item.isLocked" de la vérification ici :
+            if(!item || item.isDefacture) return; 
+            
             currentDreFseId = fseId; 
-            document.getElementById('dreModalPatientName').innerText = item.patient || 'Inconnu'; document.getElementById('dreModalFseNum').innerText = item.numFSE !== '-' ? item.numFSE : 'Non renseigné';
-            document.getElementById('dreModal_mutuelle').value = item.mutuelle !== 'AMO seule' ? item.mutuelle : ''; document.getElementById('dreModal_num').value = item.dre !== '-' ? item.dre : ''; 
-            document.getElementById('dreModal').classList.remove('hidden'); setTimeout(() => document.getElementById('dreModal_num').focus(), 100);
+            document.getElementById('dreModalPatientName').innerText = item.patient || 'Inconnu'; 
+            document.getElementById('dreModalFseNum').innerText = item.numFSE !== '-' ? item.numFSE : 'Non renseigné';
+            document.getElementById('dreModal_mutuelle').value = item.mutuelle !== 'AMO seule' ? item.mutuelle : ''; 
+            document.getElementById('dreModal_num').value = item.dre !== '-' ? item.dre : ''; 
+            document.getElementById('dreModal').classList.remove('hidden'); 
+            setTimeout(() => document.getElementById('dreModal_num').focus(), 100);
         }
         function closeDreModal() { document.getElementById('dreModal').classList.add('hidden'); currentDreFseId = null; }
 
@@ -1424,7 +1448,6 @@
                     let roBtnClass = f.checkRO ? (isInJustif && !isDefac ? 'bg-yellow-400 text-gray-900' : 'bg-emerald-600 text-white') : 'bg-gray-200 text-gray-600';
                     let rcBtnClass = f.checkRC ? (isInJustif && !isDefac ? 'bg-yellow-400 text-gray-900' : 'bg-indigo-600 text-white') : 'bg-gray-200 text-gray-600';
 
-                    // --- MENU DÉROULANT MUTUELLE & AUTO-CORRECTION ---
                     if (f.partRC === 0 && f.mutuelle === 'AMO seule') { f.mutuelle = 'ALD'; dbUpdateFse(f); }
 
                     const exoTypes = ['ALD', 'AT', 'Exo', 'Exo_Mat'];
@@ -1442,7 +1465,8 @@
                         mutAffichage = `<div class="text-gray-700 truncate max-w-[100px] ${txtClass}">${f.mutuelle}</div><div class="text-[9px] text-indigo-500 font-bold">${f.dre !== '-' ? 'DRE:'+f.dre : ''}</div>`;
                     }
 
-                    let actionDreBtn = (!isDefac && !isLocked && f.partRC > 0 && (f.dre === '-' || !f.dre) && f.mutuelle === 'AMO seule') ? `<button onclick="openDreModal('${f.id}')" class="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded border border-indigo-300 shadow-sm hover:bg-indigo-200">+ DRE</button>` : '';
+                    // NOUVEAU : On autorise le bouton DRE même si c'est verrouillé (on a enlevé !isLocked)
+                    let actionDreBtn = (!isDefac && f.partRC > 0 && (f.dre === '-' || !f.dre) && f.mutuelle === 'AMO seule') ? `<button onclick="openDreModal('${f.id}')" class="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded border border-indigo-300 shadow-sm hover:bg-indigo-200">+ DRE</button>` : '';
 
                     const tr = document.createElement('tr'); tr.className = `border-b border-gray-100 ${rowClass}`;
                     tr.innerHTML = `
@@ -1537,10 +1561,15 @@
             const normalMode = document.getElementById('normalModeContainer');
             const releveMode = document.getElementById('releveModeContainer');
             
+            // NOUVEAU : Gestion dynamique de l'ordre de tabulation
+            ['n_encaisse', 'n_releve', 'n_info'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.tabIndex = isReleve ? 0 : -1;
+            });
+            
             if (isReleve) {
                 normalMode.classList.add('hidden');
                 releveMode.classList.remove('hidden');
-                // Pré-remplir la date d'encaissement avec la date saisie
                 const dDate = document.getElementById('n_date').value;
                 if (dDate) document.getElementById('n_encaisse').value = dDate;
                 
