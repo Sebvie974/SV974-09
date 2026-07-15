@@ -2869,8 +2869,11 @@
 
             const first = fsesInLot[0];
             
-            // Demande les nouvelles valeurs
-            const newLot = prompt("MODIFIER LE LOT\nNouveau numéro de lot :", first.lot);
+            // Demande les nouvelles valeurs en cascade
+            const newDate = prompt("MODIFIER LE LOT\nNouvelle date du lot (Format requis : AAAA-MM-JJ) :", first.date);
+            if(newDate === null) return; 
+
+            const newLot = prompt("Nouveau numéro de lot :", first.lot);
             if(newLot === null) return; 
             
             const newCaisse = prompt("Nouvelle caisse pour ce lot (ex: CPAM) :", first.caisse);
@@ -2880,6 +2883,8 @@
             
             // Met à jour toutes les FSE du lot
             fsesInLot.forEach(f => {
+                // Si la date est effacée par erreur, on garde l'ancienne pour ne pas casser le code
+                f.date = newDate.trim() !== '' ? newDate : first.date; 
                 f.lot = newLot || '-';
                 f.caisse = newCaisse || '-';
             });
