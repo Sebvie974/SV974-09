@@ -1616,12 +1616,18 @@
             const gPrat = document.getElementById('globalPraticienFilter').value;
             let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
 
+            // NOUVEAU : Récupération de la date de référence pour empêcher les factures futures
+            const refDateStr = document.getElementById('n_encaisse').value || document.getElementById('n_date').value;
+            const refDate = refDateStr ? new Date(refDateStr) : null;
+
             // Filtrage des FSE non rapprochées en banque
             let pendingFses = fseList.filter(f => {
                 if (f.isDefacture || f.isLocked) return false;
                 if (f.praticien !== targetPraticien) return false;
                 
-                // NOUVELLE LOGIQUE : On vérifie si la part n'a PAS de date de virement
+                // NOUVEAU : Blocage des factures postérieures à la date du relevé
+                if (refDate && new Date(f.date) > refDate) return false;
+                
                 let dueRO = (!f.dateVirementRO && f.partRO > 0) ? f.partRO : 0;
                 let dueRC = (!f.dateVirementRC && f.partRC > 0) ? f.partRC : 0;
                 
@@ -1640,18 +1646,16 @@
             pendingFses.sort((a, b) => new Date(a.date) - new Date(b.date));
 
             if (pendingFses.length === 0) {
-                listContainer.innerHTML = '<div class="p-4 text-center text-gray-500 text-xs italic">Aucune facture en attente de rapprochement ne correspond aux critères.</div>';
+                listContainer.innerHTML = '<div class="p-4 text-center text-gray-500 text-xs italic">Aucune facture en attente de rapprochement ne correspond aux critères (ou la date sélectionnée est trop ancienne).</div>';
             }
 
             pendingFses.forEach(f => {
-                // On recalcule les parts dues (sans date de virement) pour l'affichage
                 let dueRO = (!f.dateVirementRO && f.partRO > 0) ? f.partRO : 0;
                 let dueRC = (!f.dateVirementRC && f.partRC > 0) ? f.partRC : 0;
 
                 let div = document.createElement('div');
                 div.className = "flex flex-col p-2.5 border-b border-gray-100 hover:bg-amber-50/30 transition-colors";
                 
-                // En-tête du patient et de la facture
                 let headerHtml = `
                     <div class="flex justify-between items-start mb-2 px-1">
                         <div>
@@ -1664,7 +1668,6 @@
                 
                 let partsHtml = '';
 
-                // Ligne indépendante pour la part RO
                 if (dueRO > 0) {
                     let mentionNoemieRO = f.checkRO ? ' <span class="text-[9px] text-emerald-600 bg-emerald-100 px-1 rounded ml-1 font-bold">NOEMIE OK</span>' : '';
                     partsHtml += `
@@ -1678,7 +1681,6 @@
                     `;
                 }
                 
-                // Ligne indépendante pour la part RC
                 if (dueRC > 0) {
                     let mentionNoemieRC = f.checkRC ? ' <span class="text-[9px] text-indigo-500 bg-indigo-100 px-1 rounded ml-1 font-bold">NOEMIE OK</span>' : '';
                     partsHtml += `
@@ -1693,7 +1695,6 @@
                 }
 
                 div.innerHTML = headerHtml + partsHtml + `</div>`;
-                
                 div.addEventListener('change', () => { updateReleveTotals(); });
                 listContainer.appendChild(div);
             });
@@ -1914,10 +1915,24 @@
         async function updateNoemieInline(id, field, val) {
             const item = noemieList.find(n => n.id === id);
             if(item) { 
+                
+                // NOUVEAU : Alerte si la date saisie est incohérente avec les factures
+                if ((field === 'encaisseLe' || field === 'dateNoemie') && val) {
+                    if (item.factures && item.factures.length > 0) {
+                        const invalidFses = item.factures.filter(fac => {
+                            const linkedFse = fseList.find(f => f.numFSE === fac.fse && !f.isDefacture);
+                            return linkedFse && new Date(linkedFse.date) > new Date(val);
+                        });
+                        
+                        if (invalidFses.length > 0) {
+                            alert(`⚠️ ATTENTION INCOHÉRENCE DE DATE :\n\nVous avez saisi la date du ${new Date(val).toLocaleDateString('fr-FR')}, mais ce retour contient ${invalidFses.length} facture(s) émise(s) APRÈS cette date.\n\nVeuillez vérifier votre saisie.`);
+                        }
+                    }
+                }
+                
                 item[field] = val; 
                 let fsesToUpdate = [];
 
-                // Si on a modifié la date d'encaissement, on synchronise les FSE concernées
                 if (field === 'encaisseLe' && val) {
                     if (item.factures && item.factures.length > 0) {
                         item.factures.forEach(fac => {
@@ -1955,11 +1970,9 @@
                 ]);
                 document.body.style.cursor = 'default';
                 
-                // Rafraîchir les tableaux
                 renderNoemieTable();
                 if (fsesToUpdate.length > 0) render();
 
-                // Si on vient de valider la date, on ouvre la mini-modale pour le relevé
                 if (field === 'encaisseLe' && val) {
                     currentNoemieReleveId = id;
                     document.getElementById('miniReleveInput').value = item.releve || '';
@@ -2085,20 +2098,16 @@
                             let dRO = linkedFse.dateVirementRO ? new Date(linkedFse.dateVirementRO).toLocaleDateString('fr-FR') : '';
                             let dRC = linkedFse.dateVirementRC ? new Date(linkedFse.dateVirementRC).toLocaleDateString('fr-FR') : '';
                             
-                            // Détermination de la part concernée par ce retour pour n'afficher que l'essentiel
                             let mVal = parseFloat(f.montant) || 0;
                             let isRO = f.type === 'RO' || Math.abs(mVal - linkedFse.partRO) <= 0.01;
                             let isRC = f.type === 'RC' || Math.abs(mVal - linkedFse.partRC) <= 0.01;
                             let isGlobal = Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
 
+                            // NOUVEAU : Format strictement séparé RO et RC (sans le "Encaissé :")
                             if (isGlobal || (isRO && isRC)) {
                                 if (dRO || dRC) isFseRapproche = true;
-                                if (dRO && dRC && dRO === dRC) {
-                                    dateInfoHtml = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200">Encaissé: ${dRO}</span>`;
-                                } else {
-                                    if (dRO) dateInfoHtml += `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200 mr-1">RO: ${dRO}</span>`;
-                                    if (dRC) dateInfoHtml += `<span class="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shadow-sm border border-indigo-200">RC: ${dRC}</span>`;
-                                }
+                                if (dRO) dateInfoHtml += `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200 mr-1">RO: ${dRO}</span>`;
+                                if (dRC) dateInfoHtml += `<span class="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shadow-sm border border-indigo-200">RC: ${dRC}</span>`;
                             } else if (isRO) {
                                 if (dRO) {
                                     dateInfoHtml = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200">RO: ${dRO}</span>`;
