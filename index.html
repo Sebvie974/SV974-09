@@ -2531,28 +2531,21 @@
         function renderImpayesTable() {
             const tbody = document.getElementById('impayesTableBody');
             if (!tbody) return;
-            tbody.innerHTML = ''; // On vide le tableau avant de le remplir
+            tbody.innerHTML = ''; 
 
-            // Récupération de la recherche textuelle
             const searchInput = document.getElementById('sImpayesText');
             const searchText = searchInput ? searchInput.value.toLowerCase() : '';
             
-            // NOUVEAU : Récupération du filtre praticien global
             const gPrat = document.getElementById('globalPraticienFilter') ? document.getElementById('globalPraticienFilter').value : 'ALL';
             
-            // 1. On filtre la base de données
             let impayes = fseList.filter(f => {
                 if (f.isDefacture || f.isLocked) return false;
-                
-                // NOUVEAU : On cache la facture si elle n'appartient pas au praticien sélectionné
                 if (gPrat !== 'ALL' && f.praticien !== gPrat) return false;
                 
                 const roDu = f.checkRO ? 0 : f.partRO;
                 const rcDu = f.checkRC ? 0 : f.partRC;
-                
-                if ((roDu + rcDu) <= 0) return false; // S'il ne doit rien, on ignore
+                if ((roDu + rcDu) <= 0) return false; 
 
-                // Si on a tapé une recherche
                 if (searchText) {
                     const searchStr = `${f.patient} ${f.numFSE} ${f.mutuelle} ${f.caisse}`.toLowerCase();
                     if (!searchStr.includes(searchText)) return false;
@@ -2560,7 +2553,6 @@
                 return true;
             });
 
-            // 2. On trie les résultats
             impayes.sort((a, b) => {
                 let valA, valB;
                 switch(impSort.col) {
@@ -2580,24 +2572,22 @@
                 return 0;
             });
 
-            // 3. Affichage si aucun impayé
             if (impayes.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500 italic">Aucun impayé correspondant. 🎉</td></tr>';
                 return;
             }
 
-            // 4. Génération des lignes HTML
             impayes.forEach(f => {
                 const roDu = f.checkRO ? 0 : f.partRO;
                 const rcDu = f.checkRC ? 0 : f.partRC;
                 const totalDu = roDu + rcDu;
 
-                // Sécurisation des noms avec apostrophes (ex: "L'Oréal" ou "D'Arc") pour éviter de casser le code HTML
                 const safePatient = (f.patient || '').replace(/'/g, "\\'");
                 const safeMutuelle = (f.mutuelle || '').replace(/'/g, "\\'");
 
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-rose-50 transition-colors border-b border-gray-100";
+                
                 tr.innerHTML = `
                     <td class="p-3 text-gray-700 font-medium">${new Date(f.date).toLocaleDateString('fr-FR')}</td>
                     <td class="p-3">${getPraticienBadge(f.praticien)}</td>
@@ -3035,82 +3025,99 @@ function updateNoemieTotal() {
 // ==========================================
         // MODALE LISTE FILTRÉE (PATIENT OU MUTUELLE)
         // ==========================================
-        function showFilteredImpayesModal(type, valeur) {
-            const tbody = document.getElementById('filteredImpayesBody');
-            const titleEl = document.getElementById('filteredImpayesTitle');
-            const colAltEl = document.getElementById('filteredImpayesColAlt');
-            const totalEl = document.getElementById('filteredImpayesTotal');
+        let currentImpayesFilterType = null;
+        let currentImpayesFilterValue = null;
+
+        function showFilteredImpayesModal(type, value) {
+            currentImpayesFilterType = type;
+            currentImpayesFilterValue = value;
             
-            if (!tbody || !valeur) return;
+            // Par défaut, si on est en vue "Tous les Praticiens", on coche la case
+            const gPrat = document.getElementById('globalPraticienFilter').value;
+            document.getElementById('impayesShowAllPrats').checked = (gPrat === 'ALL');
+            
+            const titlePrefix = type === 'patient' ? 'Patient : ' : 'Mutuelle : ';
+            document.getElementById('filteredImpayesSubtitle').innerText = titlePrefix + value;
+            document.getElementById('filteredImpayesModal').classList.remove('hidden');
+            
+            renderFilteredImpayes();
+        }
+
+        function closeFilteredImpayesModal() {
+            document.getElementById('filteredImpayesModal').classList.add('hidden');
+            currentImpayesFilterType = null;
+            currentImpayesFilterValue = null;
+        }
+
+        function renderFilteredImpayes() {
+            if (!currentImpayesFilterValue) return;
+            
+            const tbody = document.getElementById('filteredImpayesBody');
             tbody.innerHTML = '';
             
-            // 1. Filtrage strict selon le type cliqué
-            let filtered = fseList.filter(f => {
-                if (f.isDefacture || f.isLocked) return false;
-                const roDu = f.checkRO ? 0 : f.partRO;
-                const rcDu = f.checkRC ? 0 : f.partRC;
-                if ((roDu + rcDu) <= 0) return false;
+            const showAllPrats = document.getElementById('impayesShowAllPrats').checked;
+            const gPrat = document.getElementById('globalPraticienFilter').value;
+            const activePrat = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
 
-                if (type === 'patient') {
-                    return f.patient === valeur;
-                } else if (type === 'mutuelle') {
-                    const mut = f.mutuelle || '-';
-                    return mut === valeur;
-                }
-                return false;
+            let totalDu = 0;
+
+            let filtered = fseList.filter(f => {
+                if (f.isLocked || f.isDefacture) return false;
+                
+                if (currentImpayesFilterType === 'patient' && f.patient !== currentImpayesFilterValue) return false;
+                if (currentImpayesFilterType === 'mutuelle' && f.mutuelle !== currentImpayesFilterValue) return false;
+                
+                if (!showAllPrats && f.praticien !== activePrat) return false;
+                
+                const pRO = f.checkRO ? f.partRO : 0;
+                const pRC = f.checkRC ? f.partRC : 0;
+                if ((f.partRO + f.partRC) - (pRO + pRC) <= 0.01) return false;
+                
+                return true;
             });
 
-            // 2. Tri par date (les plus anciennes en haut, car ce sont les plus urgentes à relancer)
-            filtered.sort((a, b) => new Date(a.date) - new Date(b.date));
+            filtered.sort((a,b) => new Date(b.date) - new Date(a.date));
 
-            // 3. Mise à jour des titres selon le contexte
-            if (type === 'patient') {
-                titleEl.innerHTML = `Impayés du patient : <span class="text-indigo-200 ml-1">${valeur}</span>`;
-                colAltEl.innerText = "Mutuelle / Caisse";
-            } else {
-                titleEl.innerHTML = `Impayés de la mutuelle : <span class="text-indigo-200 ml-1">${valeur}</span>`;
-                colAltEl.innerText = "Patient";
-            }
-
-            let totalList = 0;
-
-            // 4. Génération des lignes de la sous-liste
             filtered.forEach(f => {
-                const roDu = f.checkRO ? 0 : f.partRO;
-                const rcDu = f.checkRC ? 0 : f.partRC;
-                const totalDu = roDu + rcDu;
-                totalList += totalDu;
-
-                // Contenu alternatif : Si on est sur un patient, on affiche sa mutuelle. Sinon, on affiche le patient.
-                const altContent = type === 'patient' 
-                    ? `<div class="font-semibold text-gray-700 truncate max-w-[150px]">${f.mutuelle || '-'}</div><div class="text-[10px] text-gray-500">${f.caisse || '-'}</div>`
-                    : `<div class="font-bold text-gray-800">${f.patient}</div>`;
+                const resteRO = f.checkRO ? 0 : f.partRO;
+                const resteRC = f.checkRC ? 0 : f.partRC;
+                const resteTotal = resteRO + resteRC;
+                totalDu += resteTotal;
 
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-rose-50 transition-colors";
+                tr.className = "hover:bg-indigo-50/50 transition-colors";
+                
+                const pratBadge = showAllPrats ? `<div class="mt-1">${getPraticienBadge(f.praticien)}</div>` : '';
+                
+                const colAltDisplay = currentImpayesFilterType === 'patient' 
+                    ? `<div class="text-[10px] text-gray-500">${f.caisse || '-'} / <span class="font-bold text-gray-800">${f.mutuelle || '-'}</span></div>` 
+                    : `<div class="font-bold text-gray-800 text-xs">${f.patient}</div>`;
+
                 tr.innerHTML = `
-                    <td class="p-3 text-gray-700">${new Date(f.date).toLocaleDateString('fr-FR')}</td>
+                    <td class="p-3 text-[11px] text-gray-600 font-medium">${new Date(f.date).toLocaleDateString('fr-FR')}</td>
                     <td class="p-3 text-center">
-                        <span class="font-mono text-emerald-700 cursor-pointer hover:text-emerald-500 hover:underline" 
-                              onclick="showImpayesFseDetails('${f.id}')" title="Voir les détails de la facture">
-                            ${f.numFSE || '-'}
-                        </span>
+                        <button onclick="showFseDetailsModal('${f.numFSE}')" class="font-bold font-mono text-indigo-600 hover:text-indigo-800 hover:underline outline-none transition">${f.numFSE || '-'}</button>
+                        ${pratBadge}
                     </td>
-                    <td class="p-3">${altContent}</td>
+                    <td class="p-3">
+                        ${colAltDisplay}
+                    </td>
                     <td class="p-3 text-right">
-                        <div class="font-black text-rose-600">${totalDu.toFixed(2)} €</div>
-                        <div class="text-[9px] font-normal text-rose-400 uppercase tracking-widest mt-0.5">${roDu > 0 ? 'RO ' : ''}${rcDu > 0 ? 'RC' : ''}</div>
+                        <div class="font-black font-mono text-rose-600 text-sm">${resteTotal.toFixed(2)} €</div>
+                        <div class="text-[9px] text-gray-400 font-mono mt-0.5">RO: ${resteRO.toFixed(2)} | RC: ${resteRC.toFixed(2)}</div>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
 
-            totalEl.innerText = totalList.toFixed(2) + " €";
-            document.getElementById('filteredImpayesModal').classList.remove('hidden');
-        }
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-500 italic text-xs">Aucun impayé trouvé.</td></tr>`;
+            }
 
-        function closeFilteredImpayesModal() {
-            document.getElementById('filteredImpayesModal').classList.add('hidden');
+            document.getElementById('filteredImpayesTotal').innerText = totalDu.toFixed(2) + ' €';
+            
+            const colHeader = document.getElementById('filteredImpayesColAlt');
+            if (colHeader) colHeader.innerText = currentImpayesFilterType === 'patient' ? 'Caisse / Mutuelle' : 'Patient';
         }
 
         // ==========================================
