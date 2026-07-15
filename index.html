@@ -2095,15 +2095,18 @@
                         let isFseRapproche = false;
                         
                         if (linkedFse) {
-                            let dRO = linkedFse.dateVirementRO ? new Date(linkedFse.dateVirementRO).toLocaleDateString('fr-FR') : '';
-                            let dRC = linkedFse.dateVirementRC ? new Date(linkedFse.dateVirementRC).toLocaleDateString('fr-FR') : '';
+                            // Fonction de sécurité pour valider la date
+                            let isValidDate = (d) => d && !isNaN(new Date(d).getTime());
+
+                            let dRO = isValidDate(linkedFse.dateVirementRO) ? new Date(linkedFse.dateVirementRO).toLocaleDateString('fr-FR') : '';
+                            // Blocage strict : On n'affiche la date RC QUE si la part RC existe (> 0)
+                            let dRC = (linkedFse.partRC > 0 && isValidDate(linkedFse.dateVirementRC)) ? new Date(linkedFse.dateVirementRC).toLocaleDateString('fr-FR') : '';
                             
                             let mVal = parseFloat(f.montant) || 0;
                             let isRO = f.type === 'RO' || Math.abs(mVal - linkedFse.partRO) <= 0.01;
-                            let isRC = f.type === 'RC' || Math.abs(mVal - linkedFse.partRC) <= 0.01;
-                            let isGlobal = Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
+                            let isRC = (linkedFse.partRC > 0) && (f.type === 'RC' || Math.abs(mVal - linkedFse.partRC) <= 0.01);
+                            let isGlobal = (linkedFse.partRC > 0) && Math.abs(mVal - (linkedFse.partRO + linkedFse.partRC)) <= 0.01;
 
-                            // NOUVEAU : Format strictement séparé RO et RC (sans le "Encaissé :")
                             if (isGlobal || (isRO && isRC)) {
                                 if (dRO || dRC) isFseRapproche = true;
                                 if (dRO) dateInfoHtml += `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded shadow-sm border border-emerald-200 mr-1">RO: ${dRO}</span>`;
