@@ -1760,11 +1760,8 @@
             // 2. VÉRIFICATION INTELLIGENTE DES DOUBLONS
             // ==========================================
             if (!currentNoemieEditId) { 
-                let duplicateReleve = false;
                 let duplicateFSEs = [];
-                const releveVal = document.getElementById('n_releve').value.trim();
-
-                if (releveVal) duplicateReleve = noemieList.some(n => n.releve === releveVal);
+                // Suppression de la vérification de doublon du relevé bancaire (totalement normal)
 
                 extractedRows.forEach(row => {
                     if (row.fse && row.fse !== '-') {
@@ -1798,10 +1795,9 @@
                     }
                 });
 
-                if (duplicateReleve || duplicateFSEs.length > 0) {
+                if (duplicateFSEs.length > 0) {
                     let msg = "⚠️ ATTENTION - DOUBLON(S) POTENTIEL(S) :\n\n";
-                    if (duplicateReleve) msg += `- Le Relevé N° ${releveVal} a déjà été enregistré.\n`;
-                    if (duplicateFSEs.length > 0) msg += `- Les parts correspondantes de ces factures sont déjà pointées : ${duplicateFSEs.join(', ')}.\n`;
+                    msg += `- Les parts correspondantes de ces factures sont déjà pointées : ${duplicateFSEs.join(', ')}.\n`;
                     msg += "\nVoulez-vous vraiment forcer cet enregistrement ?";
                     if (!confirm(msg)) return; 
                 }
@@ -1811,7 +1807,7 @@
             // 3. APPLICATION AUX FSE & SAUVEGARDE
             // ==========================================
             let facturesData = [], totalGeneral = 0, fsesToUpdate = [];
-            let noemiesToUpdate = []; // Tableau pour inclure les NOEMIE d'origine à mettre à jour
+            let noemiesToUpdate = []; 
             const dEncaisse = document.getElementById('n_encaisse').value;
             const valReleve = document.getElementById('n_releve').value.trim();
             
@@ -1827,7 +1823,6 @@
                             if (row.type === 'RO') { linkedFse.checkRO = true; if(dEncaisse) linkedFse.dateVirementRO = dEncaisse; }
                             if (row.type === 'RC') { linkedFse.checkRC = true; if(dEncaisse) linkedFse.dateVirementRC = dEncaisse; }
                             
-                            // NOUVEAU : Auto-complétion du retour NOEMIE/Justif parent
                             noemieList.forEach(nItem => {
                                 if ((nItem.catNoemie || nItem.catJustif) && nItem.factures && nItem.factures.some(f => f.fse === row.fse)) {
                                     let nChanged = false;
@@ -1864,7 +1859,6 @@
                 noemieList[index] = { ...noemieList[index], ...newNoemieData }; targetNoemie = noemieList[index];
             } else { targetNoemie = { ...newNoemieData, id: Date.now().toString() }; noemieList.push(targetNoemie); }
 
-            // Ajoute le nouveau relevé (ou celui modifié) à la liste des mises à jour
             noemiesToUpdate.push(targetNoemie);
 
             document.body.style.cursor = 'wait';
@@ -1872,7 +1866,6 @@
             const uniqueFsesToUpdate = Array.from(new Set(fsesToUpdate));
             const uniqueNoemiesToUpdate = Array.from(new Set(noemiesToUpdate));
             
-            // Upsert groupé sur la base de données
             const [resNoemie, resFse] = await Promise.all([
                 supabaseClient.from('noemie').upsert(uniqueNoemiesToUpdate.map(mapNoemieToDb)),
                 uniqueFsesToUpdate.length > 0 ? supabaseClient.from('fse').upsert(uniqueFsesToUpdate.map(mapFseToDb)) : Promise.resolve({ error: null })
