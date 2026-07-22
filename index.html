@@ -1123,8 +1123,11 @@
             if(elRO) elRO.innerText = tRO.toFixed(2); if(elRC) elRC.innerText = tRC.toFixed(2); if(elGlobal) elGlobal.innerText = (tRO + tRC).toFixed(2);
         }
 
+        // 2. Gestion de l'affichage du champ Mutuelle dans la modale
         function resetFseFormState() {
-            currentEditId = null; document.getElementById('submitBtnFse').innerText = "Enregistrer le Lot"; document.getElementById('fseFormTitle').innerText = "Saisie d'un Lot de Facturation";
+            currentEditId = null; 
+            document.getElementById('submitBtnFse').innerText = "Enregistrer le Lot"; 
+            document.getElementById('fseFormTitle').innerText = "Saisie d'un Lot de Facturation";
             
             // On cache la mutuelle et on affiche le bouton "Générer"
             const mutDiv = document.getElementById('fseEditMutuelleDiv');
@@ -1134,19 +1137,40 @@
             const mutInput = document.getElementById('fseMutuelle');
             if (mutInput) mutInput.value = '';
 
-            const gPrat = document.getElementById('globalPraticienFilter').value; let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
+            const gPrat = document.getElementById('globalPraticienFilter').value; 
+            let targetPraticien = gPrat !== 'ALL' ? gPrat : (praticiensList.length > 0 ? praticiensList[0].name : '');
             let lastLotText = "-";
+            
             if (fseList.length > 0 && targetPraticien) {
                 let validFses = fseList.filter(f => !f.isDefacture && f.lot && f.lot !== '-' && f.praticien === targetPraticien);
+                
                 if (validFses.length > 0) {
-                    let maxLot = Math.max(...validFses.map(f => parseInt(f.lot) || 0));
-                    if(maxLot > 0) lastLotText = maxLot.toString();
-                    else lastLotText = [...validFses].sort((a,b) => new Date(b.date) - new Date(a.date))[0].lot;
+                    // NOUVEAU : Tri chronologique (le plus récent en premier) au lieu de Math.max
+                    validFses.sort((a, b) => {
+                        // 1. On compare les dates de facturation
+                        let diffDate = new Date(b.date) - new Date(a.date);
+                        if (diffDate !== 0) return diffDate;
+                        
+                        // 2. Si plusieurs lots ont été faits le même jour, on utilise l'ID 
+                        // (qui est généré avec Date.now() lors de la création) pour cibler le petit dernier
+                        return b.id.localeCompare(a.id);
+                    });
+                    
+                    lastLotText = validFses[0].lot;
                 }
             }
-            const lastLotSpan = document.getElementById('lastLotInfo'); if (lastLotSpan) lastLotSpan.innerText = lastLotText;
-            document.getElementById('fseLot').value = ''; document.getElementById('fseDegradeLot').checked = false; document.getElementById('fseCaisse').value = ''; document.getElementById('nbFseToAdd').value = 1; document.getElementById('fseFacturesList').innerHTML = '';
-            addFseRow(); updateActivePraticienLabels();
+            
+            const lastLotSpan = document.getElementById('lastLotInfo'); 
+            if (lastLotSpan) lastLotSpan.innerText = lastLotText;
+            
+            document.getElementById('fseLot').value = ''; 
+            document.getElementById('fseDegradeLot').checked = false; 
+            document.getElementById('fseCaisse').value = ''; 
+            document.getElementById('nbFseToAdd').value = 1; 
+            document.getElementById('fseFacturesList').innerHTML = '';
+            
+            addFseRow(); 
+            updateActivePraticienLabels();
         }
 
         // ==========================================
